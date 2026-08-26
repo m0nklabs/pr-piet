@@ -179,6 +179,7 @@ jobs:
           ls -la .pr_piet/
 
       - name: PR Agent (tier 1)
+        id: pr-agent
 
         uses: the-pr-agent/pr-agent@main
         with:
@@ -206,6 +207,35 @@ jobs:
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: ${{ inputs.auto_describe }}
           github_action_config.auto_improve: ${{ inputs.auto_improve }}
+          # Schrijf de gestructureerde review-JSON naar de step-output, zodat
+          # wij die kunnen omzetten naar een formele GitHub review (Copilot-look).
+          github_action_config.enable_output: "true"
+
+      - name: Submit formele GitHub review (Copilot-stijl)
+        id: submit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_JSON: ${{ steps.pr-agent.outputs.review }}
+        run: |
+          if [ -n "${REVIEW_JSON}" ]; then
+            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review.json
+            json_arg="--review-json /tmp/pr-agent-review.json"
+          else
+            echo "Geen review-JSON in step-output; fallback: body uit issue-comment"
+            json_arg=""
+          fi
+          python3 pr-piet/scripts/submit_review.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --heading "PR Reviewer Guide" \
+            --since "${{ steps.ts.outputs.since }}" \
+            ${json_arg} \
+            > /tmp/submit_review.out 2> /tmp/submit_review.err || true
+          cat /tmp/submit_review.out
+          if [ -s /tmp/submit_review.err ]; then
+            echo "--- stderr ---"
+            cat /tmp/submit_review.err
+          fi
 
       - name: Detecteer tier-1 resultaat (clean of findings)
         id: detect
