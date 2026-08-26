@@ -152,3 +152,10 @@ formele review: badge + threads (Copilot-look)
 > "PR Reviewer Guide"-tab) **als** (via onze converter) als formele review.
 > Dit is bewust voor nu: de issue-comment blijft de bron voor de tier-2
 > poortwachter (`detect_review_clean.py`).
+
+Geverifieerd (2026-08-26, guardian-llmprovider-gateway):
+- PR #4 (met bugs) → formele review `CHANGES_REQUESTED` + 2 inline threads
+  op de diff (timing-leak, missing guard) + volle body.
+- PR #5 (schoon) → formele review `COMMENTED` + body, 0 inline threads,
+  tier 2 draaide.
+> De GitHub REST API noemt de `COMMENT`-event-state `COMMENTED` in responses.
