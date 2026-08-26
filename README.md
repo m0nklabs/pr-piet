@@ -43,6 +43,22 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
    - Tier 2 (second opinion) draait alleen als tier 1
      "No major issues detected" meldt en `enable_tier2: true`.
 
+### Geïnstalleerd (status 2026-08-26)
+
+De caller staat in alle m0nklabs-repos (m.u.v. `pr-piet` zelf — recursion —
+en het lege `caretaker-llama-cpp`) én in de publieke non-fork m0nk111-repos:
+
+| Org | Repos |
+|---|---|
+| `m0nklabs` (18) | agentic-stack-template, cryptotrader, fridge-cam-firmware, github-action-runners, github-copilot-config, github-loop-platform, guardian-llmprovider-gateway, hungryfoodtool, HydroCodo, keanu-factory, kyberm0nk, market-data, monifuse, nervesplat, NewNexus, oelala, oelala-storage, redacted, Reforger-LLM-Squad, wallets-data (+ llama-cpp-guardian al eerder) |
+| `m0nk111` (4, publiek) | agent-forge, agent-forge-test, CouncilOfDicks, template-helper |
+
+**Belangrijk voor m0nk111-repos:** die draaien pas als (a) er self-hosted
+runners voor die repos beschikbaar zijn en (b) `GUARDIAN_API_KEY` als
+**repo-secret** is gezet (het m0nklabs org-secret geldt niet voor een
+persoonlijk account). Zonder runners blijven de jobs queued; zonder secret
+faalt de workflow bij de eerste PR.
+
 ### Inputs (reusable workflow)
 
 | Input | Default | Omschrijving |

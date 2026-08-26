@@ -117,5 +117,12 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
 - ✅ Phase 2 (Workflow & Gateway): `reusable-pr-piet.yml` + `config/.pr_agent.toml`
   + `examples/caller-pr-piet.yml`; gateway-key `pr-piet` aangemaakt en
   geverifieerd (chat-call via gateway werkt).
-- ⏳ Phase 3 (Org-wide): repo publiceren, org-secret `GUARDIAN_API_KEY`
-  aanmaken, eerste test-PR draaien, benchmark deepseek vs glm latency.
+- ✅ Phase 3 (Org-wide): repo publiek, org-secret `GUARDIAN_API_KEY`, e2e
+  bewezen op test-PR's #10 (findings → tier 2 skip) en #11 (schoon →
+  tier 2 draaide). Caller geïnstalleerd in **alle m0nklabs-repos**
+  (m.u.v. pr-piet zelf en leeg caretaker-llama-cpp) + publieke non-fork
+  m0nk111-repos (agent-forge, agent-forge-test, CouncilOfDicks,
+  template-helper). m0nk111-repos draaien pas met eigen runners +
+  repo-secret `GUARDIAN_API_KEY`.
+- ⏳ Open: auto-trigger bij echte PR-opened in een productie-repo,
+  latency-benchmark deepseek vs glm, GitHub App-variant voor fork-PRs.
