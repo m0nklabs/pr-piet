@@ -44,6 +44,13 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    `file://`-constructies — die bestaan niet in pr-agent.
 7. **Deze repo moet publiek blijven** — anders werken cross-repo `uses:`
    vanuit andere m0nklabs-repos niet.
+8. **NOOIT auto-merge of auto-approve.** Altijd human merge. PR-Agent kan via
+   zijn interne `auto_approve()` (event=`APPROVE`) en `commitable_code_suggestions`
+   een PR laten approven/mergen; dat moet altijd UIT blijven. Houd
+   `.pr_agent.toml` vrij van `enable_auto_approve`/`auto_approve` en
+   `commitable_code_suggestions = false`. De workflow mag nooit een review met
+   event `APPROVE` posten en nooit een merge-API-aanroep doen. Merge gebeurt
+   uitsluitend handmatig (human) op GitHub.
 
 ## Architectuur
 

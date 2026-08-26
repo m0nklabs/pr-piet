@@ -216,6 +216,14 @@ def main() -> int:
         else:
             event = "COMMENT"
 
+    # Harde regel 8: NOOIT APPROVE. Altijd human merge — PR-Piet mag een PR
+    # nooit goedkeuren, alleen (informatief) COMMENT of (blokkerend)
+    # REQUEST_CHANGES posten. Defense-in-depth mocht iemand --event APPROVE
+    # doorgeven.
+    if event == "APPROVE":
+        print("geweigerd: event APPROVE is verboden (harde regel: altijd human merge)")
+        return 1
+
     # 4. Head commit-sha
     commit_sha = args.commit_sha or ""
     if not commit_sha:

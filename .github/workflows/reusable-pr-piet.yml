@@ -210,6 +210,10 @@ jobs:
           # Schrijf de gestructureerde review-JSON naar de step-output, zodat
           # wij die kunnen omzetten naar een formele GitHub review (Copilot-look).
           github_action_config.enable_output: "true"
+          # Harde regel 8: NOOIT auto-approve / auto-merge — altijd human merge.
+          # Deze env-guards overrulen repo-local .pr_agent.toml.
+          pr_code_suggestions.commutable_code_suggestions: "false"
+          pr_code_suggestions.enable_auto_approve: "false"
 
       - name: Submit formele GitHub review (Copilot-stijl)
         id: submit

@@ -76,7 +76,13 @@ publish_description_as_comment_persistent = true
 [pr_code_suggestions]
 extra_instructions = """\
 Suggest only improvements with concrete code, no style nitpicks. Prefer suggestions that fix real bugs or risks."""
+# NOOIT committable code suggestions zetten. Harde regel 8: altijd human merge —
+# commitable_code_suggestions = true geeft PR-Agent de macht om code direct aan
+# een (nieuwe) branch te committen, wat we principieel niet willen.
 commitable_code_suggestions = false
+# Harde regel 8: NOOIT auto-approve. (enable_auto_approve moet ongedefinieerd
+# blijven / false; hier expliciet als guard tegen per-ongeluk aanzetten.)
+enable_auto_approve = false
 suggestions_score_threshold = 5
 persistent_comment = true
 publish_output_no_suggestions = true
