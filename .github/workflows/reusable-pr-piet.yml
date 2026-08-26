@@ -136,6 +136,9 @@ jobs:
         with:
           name: pr-piet-context
           path: .pr_piet/
+          # .pr_piet/ is een hidden dir (punt-prefix); upload-artifact v4
+          # slaat hidden files standaard over (include-hidden-files=false).
+          include-hidden-files: true
           if-no-files-found: error
 
 # ---------------------------------------------------------------------------
