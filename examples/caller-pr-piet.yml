@@ -1,0 +1,44 @@
+# ============================================================================
+# VOORBEELD: caller-workflow voor een doel-repo (kopieer naar
+# .github/workflows/pr-piet.yml in ELK doel-repo dat PR-Piet wil gebruiken).
+# ----------------------------------------------------------------------------
+# Vereisten:
+#   - Org-secret GUARDIAN_API_KEY (de pr-piet gateway key) in de doel-repo.
+#   - Self-hosted runners [self-hosted, Linux] van de org-pool.
+#   - Voor fork-PRs: vervang `pull_request` door `pull_request_target`
+#     (zie README.md, sectie "Fork-PRs en secrets").
+# ============================================================================
+
+name: PR-Piet
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+# Eén review tegelijk per PR: nieuwe run cancelt de lopende.
+concurrency:
+  group: pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-piet:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    uses: m0nklabs/pr-piet/.github/workflows/reusable-pr-piet.yml@main
+    with:
+      # Werkt voor pull_request én issue_comment events.
+      pr_number: ${{ github.event.pull_request.number || github.event.issue.number }}
+      base_branch: ${{ github.event.pull_request.base.ref || '' }}
+      enable_tier2: true
+      auto_describe: true
+      auto_improve: true
+      response_language: en-US
+      # gateway_base_url: http://127.0.0.1:11436/v1  (default; runners op ai-kvm2)
+    secrets:
+      GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}

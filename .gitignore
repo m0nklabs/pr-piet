@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local secrets / env — NEVER commit real keys
+.env
+.env.local
+*.secret
+
+# Generated PR context (built by the map job, never committed)
+.pr_piet/context.md
+.pr_piet/*.json
+
+# OS / editor
+.DS_Store
+*.swp

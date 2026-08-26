@@ -1,0 +1,113 @@
+# AGENTS.md — instructies voor AI-agents in deze repo (m0nklabs)
+
+Dit bestand is de canonieke context voor agents die aan PR-Piet werken.
+Lees het VOORDAT je iets wijzigt.
+
+## Wat dit is
+
+PR-Piet is de **org-level PR-reviewer** van m0nklabs: een reusable GitHub
+Actions workflow die [The-PR-Agent/pr-agent](https://github.com/The-PR-Agent/pr-agent)
+draait op de org self-hosted runners (`ai-kvm2`), met extra repo-context die
+een tree-sitter-mapper (Aider-stijl) per PR bouwt. Alle modelcalls gaan via
+de **guardian-llmprovider-gateway** op dezelfde host.
+
+Andere m0nklabs-repos gebruiken PR-Piet via:
+`uses: m0nklabs/pr-piet/.github/workflows/reusable-pr-piet.yml@main`
+(zie `examples/caller-pr-piet.yml`).
+
+## Harde regels (nooit overtreden)
+
+1. **Alleen open-weights modellen.** `STRICT_OPEN_WEIGHTS_ONLY`:
+   `deepseek/deepseek-v4-flash-0731` (tier 1) en `z-ai/glm-5.2` (tier 2,
+   optionele second opinion). Nooit closed-weights modellen toevoegen.
+2. **GEEN fallback_models.** Een model- of gateway-fout moet een rode
+   workflow zijn, geen stille degradatie. `fallback_models = []` blijft leeg.
+3. **Geen secrets in deze repo.** De gateway-key (`GUARDIAN_API_KEY`) is een
+   org-secret en staat alleen in GitHub Secrets / lokale env — nooit in
+   config, workflows of README. De `.env`-bestanden zijn gitignored.
+4. **De map-job heeft géén secrets.** Job `map` draait de tree-sitter mapper
+   op PR-code (untrusted) met alleen `contents: read`. Secrets zitten alleen
+   in `review_tier1`/`review_tier2`. Nooit secrets naar de map-job brengen.
+5. **Modelnamen komen uit de gateway-catalog, niet uit aannames.** Controleer
+   altijd `config/models.cloud.overrides.yaml` en `/v1/models` van de gateway
+   (Bearer-key) voordat je een model toevoegt. De `openai/`-prefix in model-
+   namen is verplicht: die dwingt litellm naar de OpenAI-compatibele route
+   (`OPENAI.API_BASE`) via de gateway.
+6. **Repo-context via artifact_path, niet via extra_instructions.** De action
+   injecteert `.pr_piet/context.md` natively via `artifact_path`. Gebruik geen
+   `file://`-constructies — die bestaan niet in pr-agent.
+7. **Deze repo moet publiek blijven** — anders werken cross-repo `uses:`
+   vanuit andere m0nklabs-repos niet.
+
+## Architectuur
+
+```
+doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
+  └─ m0nklabs/pr-piet/.github/workflows/reusable-pr-piet.yml
+       ├─ job map          : checkout PR-head, scripts/repo_mapper.py
+       │                    (tree-sitter symbols + PageRank) -> .pr_piet/context.md
+       │                    → upload-artifact (geen secrets in deze job)
+       ├─ job review_tier1 : the-pr-agent/pr-agent@main met
+       │                    artifact_path=.pr_piet/context.md,
+       │                    model=openai/deepseek/deepseek-v4-flash-0731,
+       │                    fallback_models=[], OPENAI.API_BASE=gateway
+       │                    → detect_review_clean.py (tier1_clean output)
+       └─ job review_tier2 : alleen als enable_tier2 && tier1_clean
+                             model=openai/z-ai/glm-5.2, zelfde artifact
+```
+
+Config-hiërarchie voor pr-agent (laag → hoog):
+`built-in defaults` → `PR_AGENT_EXTRA_CONFIG_URL` (= onze
+`config/.pr_agent.toml`) → repo-local `.pr_agent.toml` (doel-repo, indien
+aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
+
+## Belangrijke feiten (geverifieerd, niet opnieuw uitzoeken)
+
+- **The-PR-Agent/pr-agent is een andere repo dan qodo-ai/pr-agent.** Deze
+  stack gebruikt The-PR-Agent (open-source, actief; de repo van de officiële
+  marketplace action `the-pr-agent/pr-agent@main`).
+- **De action leest `OPENAI_KEY`** (runner: `github_action_runner.py`), niet
+  `OPENAI__KEY`. De api_base gaat via `OPENAI.API_BASE` env.
+- **`extra_instructions` is een inline string** — geen file://-mechanisme.
+  De `artifact_path`-input van de action injecteert een bestand in
+  `extra_instructions` van pr_reviewer/pr_description/pr_code_suggestions.
+- **Tier-2 poortwachter-marker:** pr-agent schrijft exact
+  `No major issues detected` in de review-comment als er geen key issues
+  zijn (`scripts/detect_review_clean.py` matcht case-insensitief).
+- **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
+  Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
+  (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).
+- **De draaiende gateway-service leest config uit `/home/flip/llama_cpp_guardian`**
+  (systemd `llama-guardian.service`), NIET uit
+  `/home/flip/guardian-llmprovider-gateway`. Keys-file wordt per request
+  herlezen; nieuwe keys werken zonder restart. Bij twijfel: beide paden
+  sync houden.
+- **Runners:** org-pool `m0nklabs-runner-1..4`, labels `self-hosted`,
+  `Linux`, `X64`, `gpu`. PR-Piet gebruikt géén GPU. GPU-jobs nooit zonder
+  `bin/gpu-run.sh` (serieel-lock) — maar PR-Piet doet geen GPU-werk.
+- **tree-sitter-versies** zijn gepind in `requirements.txt` (0.26.x).
+  `Language()`-wrapper is verplicht in 0.26 (PyCapsule ≠ Language).
+- Gateway-catalog (2026-08-26): `deepseek/deepseek-v4-flash-0731`
+  (context 1M), `z-ai/glm-5.2` (max_tokens 16384), `~deepseek/...-latest`,
+  `z-ai/glm-5.3`, `moonshotai/kimi-k3`. De modellen uit de oorspronkelijke
+  spec (`deepseek-chat`, `qwen-2.5-coder-32b`, `deepseek-r1`) staan er NIET in.
+
+## Veilige workflows
+
+- Mapper lokaal testen: zie README ("Lokale test").
+- Workflow-wijzigingen: testen op een test-PR in een doel-repo voordat je
+  `@main` laat verwijzen naar nieuwe logica (of gebruik een `@ref`-pinning
+  in de caller).
+- Nieuwe gateway-key: `scripts/generate_key.py` in de gateway-repo, en de
+  entry óók in `/home/flip/llama_cpp_guardian/config/guardian.keys.yaml`
+  (draaiende service) zetten.
+
+## Status
+
+- ✅ Phase 1 (Core Scaffold & AST Mapper): `scripts/repo_mapper.py` klaar en
+  getest op fixture-repo (python/ts/go; truncate en ignore-patterns werken).
+- ✅ Phase 2 (Workflow & Gateway): `reusable-pr-piet.yml` + `config/.pr_agent.toml`
+  + `examples/caller-pr-piet.yml`; gateway-key `pr-piet` aangemaakt en
+  geverifieerd (chat-call via gateway werkt).
+- ⏳ Phase 3 (Org-wide): repo publiceren, org-secret `GUARDIAN_API_KEY`
+  aanmaken, eerste test-PR draaien, benchmark deepseek vs glm latency.

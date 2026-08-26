@@ -1,0 +1,90 @@
+# ============================================================================
+# PR-Piet config voor PR-Agent (The-PR-Agent/pr-agent)
+# ----------------------------------------------------------------------------
+# Wordt door de review-jobs gemerged via PR_AGENT_EXTRA_CONFIG_URL
+# (laagste prioriteit: repo-local .pr_agent.toml van het doel-repo en
+# workflow-env overriden dit — precies zoals bedoeld).
+#
+# Deployment-specifieke zaken (gateway-URL, API-key, model-keuze) komen uit
+# de workflow-env, niet uit dit bestand.
+#
+# Modelbeleid m0nklabs:
+#   - ALLEEN open-weights modellen (STRICT_OPEN_WEIGHTS_ONLY)
+#   - GEEN fallback_models: een model-fout is een rode workflow, geen stille
+#     degradatie naar een ander model.
+# ============================================================================
+
+[config]
+# Tier 1 (primair): deepseek-v4-flash-0731 via de guardian gateway.
+# Prefix "openai/" dwingt litellm de OpenAI-compatibele route te gebruiken
+# (api_base uit de workflow-env). Deze model-naam staat niet in pr-agent's
+# MAX_TOKENS-tabel, dus custom_model_max_tokens is verplicht.
+model = "openai/deepseek/deepseek-v4-flash-0731"
+
+# Bewust LEEG: geen fallback. Een gateway/model-fout faalt de workflow.
+fallback_models = []
+
+# Context-window van deepseek-v4-flash-0731 volgens de gateway-catalog
+# (models.cloud.overrides.yaml: context_window 1048576).
+custom_model_max_tokens = 1048576
+
+# Harde cap per request. Default is 32000; met 1M-context model en
+# repo-map context houden we ruimte voor grotere PRs.
+max_model_tokens = 64000
+
+# Open-weights modellen kunnen traag zijn op grote PRs (streaming review).
+ai_timeout = 300
+
+temperature = 0.2
+large_patch_policy = "clip"          # grote diffs clippen, niet skippen
+patch_extension_skip_types = [".md", ".txt", ".lock"]
+publish_output_progress = true
+output_relevant_configurations = false
+
+# Beveiliging: nooit automatisch skippen; de caller-workflow bepaalt de
+# triggers. Blijf expliciet.
+ignore_pr_title = []
+ignore_pr_labels = []
+ignore_pr_authors = []
+
+[pr_reviewer]
+# Aparte heading per tier, zodat tier-1 en tier-2 comments herkenbaar zijn
+# en persistent_comment ze niet door elkaar haalt.
+review_heading = "PR-Piet Review (tier 1)"
+persistent_comment = true
+publish_output_no_suggestions = true
+num_max_findings = 5
+require_score_review = false
+require_security_review = true
+require_tests_review = true
+require_estimate_effort_to_review = true
+extra_instructions = """\
+You are a senior code reviewer for m0nklabs. Be specific and actionable; no fluff.
+- Judge the PR using BOTH the diff and the injected repo context (changed symbols, callers, callees).
+- Call out only findings that matter for merge: bugs, security, correctness, performance, test gaps.
+- Do not invent issues; if the PR is sound, say so.
+- Security: flag secrets in code, prompt injection surfaces, and unsafe deserialization.
+"""
+
+[pr_description]
+extra_instructions = """\
+Summarize the PR factually and concisely, in the language of the PR. Use the repo context to describe impact beyond the diff."""
+enable_pr_diagram = true
+publish_description_as_comment = true
+publish_description_as_comment_persistent = true
+
+[pr_code_suggestions]
+extra_instructions = """\
+Suggest only improvements with concrete code, no style nitpicks. Prefer suggestions that fix real bugs or risks."""
+commitable_code_suggestions = false
+suggestions_score_threshold = 5
+persistent_comment = true
+publish_output_no_suggestions = true
+
+[artifacts]
+# Repo-context uit de map-job wordt via artifact_path geinjecteerd in
+# extra_instructions van deze tools. enable wordt ook automatisch gezet
+# wanneer de action de artifact_path-input krijgt.
+enable = true
+target_tools = ["pr_reviewer", "pr_description", "pr_code_suggestions"]
+max_artifact_size = 50000
