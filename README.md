@@ -176,3 +176,20 @@ Geverifieerd (2026-08-26, guardian-llmprovider-gateway):
 - PR #6 (bug + /improve) → formele review + key-issues threads **plus**
   suggestie-threads met ` ```suggestion ``` `-fence (Apply-knop).
 > De GitHub REST API noemt de `COMMENT`-event-state `COMMENTED` in responses.
+
+## Modelruimte & timeouts
+
+Op omvangrijke PR's (tientallen bestanden, ticket-compliance met de
+masterplan-body, repo-map met duizenden symbolen) kan een enkele modelcall
+langer dan 5 min duren. Als `ai_timeout` te krap staat, kapt pr-agent het
+model af terwijl het nog bezig is → `finish_reason: length` + lege content en
+géén review (of een stale fallback-body).
+
+- `config.ai_timeout` = **900** (15 min per call), in `config/.pr_agent.toml`
+  én de workflow-env (`config.ai_timeout` in `reusable-pr-piet.yml`, tier 1 en
+  tier 2 — de env overschrijft de toml, dus beide consistent houden).
+- Grens van de gateway: deepseek-provider `timeout_seconds: 1200` (20 min)
+  in `providers.settings.yaml` — 900 past er ruim binnen. Verhoog `ai_timeout`
+  nooit boven de provider-cap, anders kapt de gateway eerst af.
+- `max_model_tokens` (output-cap) op 64000 laten staan; verlagen kneep het
+  model juist (ramde tegen de cap aan op grote PRs).
