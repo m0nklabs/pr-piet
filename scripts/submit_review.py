@@ -98,6 +98,75 @@ def get_pr_head_sha(repo: str, pr_number: str, token: str) -> str:
     return (pr.get("head") or {}).get("sha", "")
 
 
+def get_added_lines_per_file(repo: str, pr_number: str, token: str) -> dict[str, set[int]]:
+    """Bouw {path: set(regelnummers)} van TOEGEVOEGDE regels (nieuwe nummering).
+
+    GitHub's reviews REST API kan alleen inline comments plaatsen op een
+    'line' (side RIGHT) die in de PR-diff staat als toegevoegde regel ('+');
+    anders geeft het 422 "Line could not be resolved". Deze functie berekent
+    uit de patch-hunks per bestand de set van nieuwe regelnummers die '+' zijn.
+    """
+    added: dict[str, set[int]] = {}
+    page = 1
+    while True:
+        url = f"{API}/repos/{repo}/pulls/{pr_number}/files?per_page=100&page={page}"
+        files = _request("GET", url, token)
+        if not isinstance(files, list):
+            break
+        for f in files:
+            path = f.get("filename", "")
+            patch = f.get("patch", "") or ""
+            lines_set = added.setdefault(path, set())
+            new_line: int | None = None
+            for line in patch.splitlines():
+                if line.startswith("@@") and new_line is None:
+                    # hunk header: @@ -old,count +new,count @@
+                    m = re.search(r"\+(\d+)(?:,\d+)? @@", line)
+                    if m:
+                        new_line = int(m.group(1))
+                    continue
+                if new_line is None:
+                    continue
+                if line.startswith("+") and not line.startswith("+++"):
+                    lines_set.add(new_line)
+                    new_line += 1
+                elif line.startswith("-") and not line.startswith("---"):
+                    continue  # verwijderde regel: telt niet in de nieuwe nummering
+                elif line.startswith(" "):
+                    new_line += 1  # contextregel: wel in nieuwe nummering
+                elif line.startswith("@@") and new_line is not None:
+                    # nieuwe hunk
+                    m = re.search(r"\+(\d+)(?:,\d+)? @@", line)
+                    if m:
+                        new_line = int(m.group(1))
+                # "\ No newline..." etc.: negeer
+        if len(files) < 100:
+            break
+        page += 1
+    return added
+
+
+def filter_resolvable_comments(
+    comments: list[dict], added_lines: dict[str, set[int]]
+) -> tuple[list[dict], int]:
+    """Houd alleen comments waarvan (path, line) op een toegevoegde diff-regel ligt.
+
+    Retourneert (resolvable_comments, aantal_overgeslagen). Niet-resolvable
+    threads (bv. op een pure-deletie-regel) worden overgeslagen i.p.v. dat de
+    héle review faalt met 422.
+    """
+    kept: list[dict] = []
+    skipped = 0
+    for c in comments:
+        path = c.get("path", "")
+        line = c.get("line")
+        if path in added_lines and isinstance(line, int) and line in added_lines[path]:
+            kept.append(c)
+        else:
+            skipped += 1
+    return kept, skipped
+
+
 # ---------------------------------------------------------------------------
 # Review-data
 # ---------------------------------------------------------------------------
@@ -311,6 +380,24 @@ def main() -> int:
     comments = build_inline_comments(review_data) if review_data else []
     suggestion_comments = build_suggestion_comments(suggestions_body)
     comments.extend(suggestion_comments)
+
+    # 2b. Filter: alleen threads waarvan de locatie op een TOEGEVOEGDE diff-regel
+    # ligt (GitHub 422 "Line could not be resolved" anders). Niet-resolvable
+    # threads overslaan, de rest posten — de samenvatting blijft altijd staan.
+    if comments:
+        try:
+            added_lines = get_added_lines_per_file(repo, args.pr_number, token)
+            comments, skipped = filter_resolvable_comments(comments, added_lines)
+            if skipped:
+                print(
+                    f"({skipped} inline thread(s) overgeslagen: locatie niet op "
+                    f"toegevoegde diff-regel)",
+                    file=sys.stderr,
+                )
+        except Exception as exc:  # noqa: BLE001
+            # Kan de diff niet ophalen: behoud de 422-retry als vangnet.
+            print(f"kon diff-regels niet ophalen (422-retry blijft actief): {exc}",
+                  file=sys.stderr)
 
     # 3. Event bepalen
     event = args.event
