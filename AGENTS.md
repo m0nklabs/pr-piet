@@ -128,6 +128,24 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   regels per bestand (`get_added_lines_per_file`) en filtert niet-resolvable
   threads (skip) — de samenvatting blijft altijd als formele review staan.
   Dit is inherent aan de GitHub API, niet te omzeilen met lijn-nummering.
+- **Dedup blokkeert alleen fallback-reviews (geen verse JSON).** De
+  review-dedup (marker `<!-- pr-piet-review:v1 head=<sha> -->` of zelfde
+  commit_id + Reviewer Guide-heading) geldt ALLEEN als de review-JSON van de
+  huidige run NIET is doorgekomen (`review_data is None`, dus we zouden een
+  fallback-body van een oude issue-comment posten). Komt de verse review-JSON
+  wél door, dan posten we altijd — een échte nieuwe analyse moet een evt.
+  stale review op dezelfde head vervangen (GitHub toont de laatste als de
+  actieve review). Dedup is bedoeld om identieke fallback-hertriggers te
+  stoppen, niet om een verse analyse te blokkeren.
+- **Modelruimte: `ai_timeout = 900` (15 min/call).** Op omvangrijke PR's
+  (tientallen bestanden + ticket-compliance-body + repo-map met duizenden
+  symbolen) duurt een enkele modelcall >5 min; met `ai_timeout=300` kapte
+  pr-agent het model af (finish_reason length + lege content) → geen review
+  of stale fallback. 900s past ruim binnen de gateway deepseek-provider-cap
+  (1200s in `providers.settings.yaml`). Deze timeout staat in
+  `config/.pr_agent.toml` én de workflow-env (`config.ai_timeout`, tier 1 én
+  2 — de env overschrijft de toml, dus beide consistent houden). Verhoog
+  nooit boven de provider-cap.
 - **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
   Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
   (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).

@@ -168,6 +168,20 @@ formele review: badge + threads (tekst) + threads (Apply-knop)
 > Dit is bewust voor nu: de issue-comment blijft de bron voor de tier-2
 > poortwachter (`detect_review_clean.py`).
 
+**Dedup-gedrag (belangrijk):** de formele review draagt een marker
+`<!-- pr-piet-review:v1 head=<sha> -->` in de body. De converter blokkeert een
+tweede formele review op dezelfde head **alleen** als er géén verse review-JSON
+uit de huidige run komt (dus bij een fallback naar een oude issue-comment-body)
+— dat voorkomt identieke fallback-hertriggers. Komt de verse review-JSON wél
+door (échte nieuwe analyse), dan wordt er altijd gepost: een verse review moet
+een evt. stale review op dezelfde head vervangen (GitHub toont de laatste als
+de actieve review-badge).
+
+**Grote PR's → modelruimte:** op omvangrijke PR's kan een enkele modelcall
+>5 min duren. Zonder ruime timeout kapt pr-agent het model af
+(`finish_reason: length` + lege content) en post hij niets of een stale
+fallback. Zie de sectie "Modelruimte & timeouts" hieronder voor de tunables.
+
 Geverifieerd (2026-08-26, guardian-llmprovider-gateway):
 - PR #4 (met bugs) → formele review `CHANGES_REQUESTED` + 2 inline threads
   op de diff (timing-leak, missing guard) + volle body.
