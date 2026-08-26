@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """
-submit_review.py — PR-Piet converter: pr-agent review -> formele GitHub review.
+submit_review.py — PR-Piet converter: pr-agent review + /improve -> formele GitHub review.
 
-Zet de pr-agent review-output om naar een formele pull-request review via de
+Zet de pr-agent output om naar een formele pull-request review via de
 GitHub REST API (POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews),
 zodat de PR eruitziet zoals een Copilot-review:
 
   - state-badge: REQUEST_CHANGES (key issues) of COMMENT (schoon)
-  - inline comment-threads op de diff (path/line/side/body per key issue)
+  - inline comment-threads op de diff (path/line/side/body)
   - de samenvattende markdown als review-body
+  - /improve code-suggesties: de ```diff```-blokken worden omgezet naar
+    ```suggestion```-fences, zodat GitHub een "Apply"-knop toont (zoals
+    Copilot-suggesties)
 
-Bron van de review-data (fallback-volgorde):
+Bronnen (gecombineerd in één formele review):
   1. --review-json <bestand>: JSON zoals pr-agent die naar GITHUB_OUTPUT
      schrijft (github_action_config.enable_output=true) -> {"review": {...}}
-  2. de nieuwste issue-comment met een gegeven heading (--heading), die
-     pr-agent net geplaatst heeft -> body; key-issues zijn dan alleen
-     beschikbaar als --review-json is gegeven.
+     (key-issues -> inline comments[])
+  2. de nieuwste issue-comment met een gegeven heading (--heading) ->
+     review-body ("PR Reviewer Guide"-markdown)
+  3. de nieuwste issue-comment met --suggestions-heading (default
+     "PR Code Suggestions") -> /improve suggesties -> ```suggestion```-fences
 
 Gebruik (in de review-job):
   GITHUB_TOKEN / GITHUB_REPOSITORY zijn env-verplicht.
@@ -24,6 +29,7 @@ Gebruik (in de review-job):
     [--review-json <file>] \
     [--heading "PR Reviewer Guide"] \
     [--since <iso-timestamp>] \
+    [--suggestions-heading "PR Code Suggestions"] \
     [--event auto|COMMENT|REQUEST_CHANGES|APPROVE] \
     [--commit-sha <sha>] \
     [--no-body]
@@ -38,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -143,6 +150,88 @@ def build_inline_comments(review_data: dict) -> list:
 
 
 # ---------------------------------------------------------------------------
+# /improve (code suggestions): ```diff``` in de "PR Code Suggestions"-comment
+# omzetten naar ```suggestion```-fences (GitHub "Apply"-knop).
+# ---------------------------------------------------------------------------
+
+# Link-formaat in de suggestie-comment:
+#   [src/foo.py [12-18]](https://github.com/.../pull/4/files#diff-<sha>R12-R18)
+_DIFF_ANCHOR_RE = re.compile(
+    r"\[(?P<file>[^\]]+?)\s*\[?(?P<start>\d+)(?:-(?P<end>\d+))?\]?"
+    r"\]\((?P<url>[^)]*#diff-[0-9a-f]+R(?P<rstart>\d+)(?:-R(?P<rend>\d+))?)"
+)
+
+_DIFF_BLOCK_RE = re.compile(r"```diff\n(?P<body>.*?)```", re.DOTALL)
+
+
+def _parse_suggestion_diff(diff_body: str) -> str:
+    """Haal de voorgestelde code (+ regels) uit een ```diff```-blok.
+
+    De verbeterde code bestaat uit de '+ ' regels (zonder het '+' prefix).
+    Contextregels (spatie) horen bij beide; we gebruiken de '+' regels als de
+    nieuwe code voor de ```suggestion```-fence.
+    """
+    lines = diff_body.splitlines()
+    out: list[str] = []
+    for line in lines:
+        if line.startswith("+++") or line.startswith("---") or line.startswith("@@"):
+            continue
+        if line.startswith("+"):
+            out.append(line[1:])
+        elif line.startswith(" ") or line.startswith("\\"):
+            out.append(line[1:])
+        # '- ' verwijderde regels: niet opnemen (het is de NIEUWE code)
+    return "\n".join(out)
+
+
+def build_suggestion_comments(suggestions_body: str) -> list:
+    """Zet de 'PR Code Suggestions ✨'-comment om naar suggestion-comments[].
+
+    Elke ```diff```-blok met een diff-anchor ([file [start-end]](...#diff-...R...))
+    wordt een inline comment met een ```suggestion```-fence (de voorgestelde
+    code) -> GitHub toont een "Apply"-knop, zoals Copilot-suggesties.
+    """
+    if not suggestions_body:
+        return []
+    comments = []
+    # Per suggestie: een anchor-geparaf meteen gevolgd door een ```diff```-blok.
+    # We scannen op het patroon anchor ... ```diff ... ```.
+    idx = 0
+    while True:
+        m = _DIFF_ANCHOR_RE.search(suggestions_body, idx)
+        if not m:
+            break
+        start = m.start()
+        rel_file = (m.group("file") or "").strip()
+        a_start = int(m.group("start"))
+        a_end = int(m.group("end") or m.group("start"))
+        # Zoek het dichtstbijzijnde ```diff```-blok NA deze anchor
+        blk = _DIFF_BLOCK_RE.search(suggestions_body, m.end())
+        if blk:
+            new_code = _parse_suggestion_diff(blk.group("body"))
+            line = a_end
+            # tussen de anchor en het diff-blok kan 'suggestion_content' staan;
+            # gewoon de fence geven is voldoende voor de Apply-knop.
+            comment_body = (
+                f"**Suggestion:**\n\n"
+                f"[{rel_file} {a_start}-{a_end}]({m.group('url')})\n\n"
+                f"```suggestion\n{new_code.rstrip()}\n```"
+            )
+            comments.append(
+                {
+                    "path": rel_file,
+                    "line": line,
+                    "side": "RIGHT",
+                    "body": comment_body,
+                }
+            )
+            idx = blk.end()
+        else:
+            idx = m.end()
+    return comments
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -153,6 +242,8 @@ def main() -> int:
     parser.add_argument("--heading", default="PR Reviewer Guide",
                         help="heading van de pr-agent review-comment (fallback body)")
     parser.add_argument("--since", help="ISO-timestamp: alleen comments hierna")
+    parser.add_argument("--suggestions-heading", default="PR Code Suggestions",
+                        help="heading van de pr-agent /improve-comment (code suggestions)")
     parser.add_argument("--event", default="auto",
                         choices=["auto", "COMMENT", "REQUEST_CHANGES", "APPROVE"])
     parser.add_argument("--commit-sha", help="head commit-sha (default: via API)")
@@ -194,12 +285,32 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"kon review-body niet ophalen: {exc}", file=sys.stderr)
 
+    # 2a. Code-suggesties (/improve): haal de "PR Code Suggestions"-comment op
+    # en zet de ```diff```-blokken om naar ```suggestion```-fences. Deze en de
+    # key-issues samen vormen de inline comments[] van de formele review.
+    suggestions_body = ""
+    try:
+        comments_ = fetch_issue_comments(repo, args.pr_number, token)
+        s_candidates = [
+            c for c in comments_
+            if (not args.since or c.get("updated_at", "") >= args.since)
+            and args.suggestions_heading in c.get("body", "")
+        ]
+        if s_candidates:
+            suggestions_body = max(
+                s_candidates, key=lambda c: c.get("updated_at", "")
+            ).get("body") or ""
+    except Exception as exc:  # noqa: BLE001
+        print(f"kon /improve-comment niet ophalen: {exc}", file=sys.stderr)
+
     if not review_data and not body:
         print("(geen review geplaatst: geen review-JSON én geen review-comment gevonden)")
         return 0
 
-    # 2. Inline comments uit de JSON
+    # 2. Inline comments uit de JSON (key-issues) + /improve-suggesties
     comments = build_inline_comments(review_data) if review_data else []
+    suggestion_comments = build_suggestion_comments(suggestions_body)
+    comments.extend(suggestion_comments)
 
     # 3. Event bepalen
     event = args.event
