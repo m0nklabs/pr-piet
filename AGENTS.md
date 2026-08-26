@@ -103,6 +103,15 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   guardian-llmprovider-gateway: `CHANGES_REQUESTED` + body + 2 inline
   threads). De markdown-body wordt altijd uit de zojuist geplaatste
   issue-comment gehaald (pr-agent post die sowieso).
+  **Combined-flow (PR #6, 2026-08-26):** `/review` + `/improve` worden
+  gecombineerd in één formele review. De `/improve`-suggesties (uit de
+  "PR Code Suggestions ✨"-issue-comment) worden als ` ```diff ``` `-blokken
+  gepost; `submit_review.py` zet die om naar ` ```suggestion ``` `-fences
+  (de voorgestelde code) zodat GitHub een "Apply"-knop toont, zoals
+  Copilot-suggesties. Belangrijk: bij `commitable_code_suggestions=false`
+  (onze harde regel 8) post pr-agent de suggesties ALLEEN als issue-comment,
+  niet inline — onze converter hergebruikt die comment en plaatst ze inline
+  mét Apply-knop via de reviews REST API.
 - **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
   Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
   (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).

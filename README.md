@@ -137,16 +137,31 @@ GitHub reviews REST API, zodat de PR eruitziet zoals een Copilot-review:
   (schoon) — ingesteld als `event` op `POST /repos/{o}/{r}/pulls/{n}/reviews`
 - **inline comment-threads** op de diff (`path`/`line`/`side`/`body` per key
   issue uit de pr-agent JSON-output)
+- **code-suggesties met Apply-knop**: de `/improve`-suggesties worden ook
+  opgenomen als inline threads, maar dan omgezet naar een
+  ` ```suggestion ``` `-fence (de voorgestelde code), zodat GitHub er een
+  "Apply"-knop bij toont — precies zoals Copilot-suggesties.
 - **review-body**: de "PR Reviewer Guide"-markdown (uit de issue-comment)
+
+De converter combineert `/review` + `/improve` in **één** formele review
+(`submit_review.py`):
+1. key-issues (uit de review-JSON) → textuele inline threads
+2. `/improve`-suggesties (uit de "PR Code Suggestions"-comment) → ` ```diff ``` `
+   blokken omgezet naar ` ```suggestion ``` `-fences → inline threads met
+   Apply-knop
 
 Flow:
 ```
-pr-agent action (github_action_config.enable_output=true)
-  └─ review-JSON → step-output (GITHUB_OUTPUT; werkt óók vanuit de docker action)
+pr-agent action (github_action_config.enable_output=true,
+                 auto_review=true, auto_improve=true)
+  ├─ review-JSON → step-output (GITHUB_OUTPUT)
+  └─ /improve-suggesties → "PR Code Suggestions ✨"-issue-comment (```diff```-blokken)
 submit_review.py (met GITHUB_TOKEN)
-  └─ body uit issue-comment + comments[] uit JSON
+  ├─ body uit "PR Reviewer Guide"-comment
+  ├─ key-issues uit review-JSON → comments[]
+  └─ suggesties uit /improve-comment → ```diff``` → ```suggestion```-fences → comments[]
      → POST /pulls/{n}/reviews { event, body, comments }
-formele review: badge + threads (Copilot-look)
+formele review: badge + threads (tekst) + threads (Apply-knop)
 ```
 > Let op: pr-agent plaatst de review **zowel** als issue-comment (de klassieke
 > "PR Reviewer Guide"-tab) **als** (via onze converter) als formele review.
@@ -158,4 +173,6 @@ Geverifieerd (2026-08-26, guardian-llmprovider-gateway):
   op de diff (timing-leak, missing guard) + volle body.
 - PR #5 (schoon) → formele review `COMMENTED` + body, 0 inline threads,
   tier 2 draaide.
+- PR #6 (bug + /improve) → formele review + key-issues threads **plus**
+  suggestie-threads met ` ```suggestion ``` `-fence (Apply-knop).
 > De GitHub REST API noemt de `COMMENT`-event-state `COMMENTED` in responses.
