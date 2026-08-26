@@ -98,6 +98,48 @@ def get_pr_head_sha(repo: str, pr_number: str, token: str) -> str:
     return (pr.get("head") or {}).get("sha", "")
 
 
+# ---------------------------------------------------------------------------
+# Dedup: per head-SHA maximaal één formele review (review_marker volgens
+# reusable-github-pr-review-loop.md: <!-- generic-pr-review:v1 key=... head=... -->)
+# ---------------------------------------------------------------------------
+
+def _review_marker(commit_sha: str) -> str:
+    return f"<!-- pr-piet-review:v1 head={commit_sha} -->"
+
+
+def already_reviewed(repo: str, pr_number: str, token: str, commit_sha: str) -> bool:
+    """Check of er al een formele review van github-actions[bot] op deze head staat.
+
+    Gebruikt de marker in de review-body. Als de marker ontbreekt (oudere
+    reviews), vallen we terug op: zelfde commit_id + zelfde event + body die
+    de "PR Reviewer Guide"-heading bevat.
+    """
+    if not commit_sha:
+        return False
+    marker = _review_marker(commit_sha)
+    page = 1
+    while True:
+        url = f"{API}/repos/{repo}/pulls/{pr_number}/reviews?per_page=100&page={page}"
+        reviews = _request("GET", url, token)
+        if not isinstance(reviews, list):
+            break
+        for rv in reviews:
+            if not (rv.get("user") or {}).get("login", "").endswith("[bot]"):
+                continue
+            body = rv.get("body") or ""
+            if marker in body:
+                return True
+            if (
+                (rv.get("commit_id") or "") == commit_sha
+                and ("PR Reviewer Guide" in body or "PR Reviewer Guide" in (rv.get("state") or ""))
+            ):
+                return True
+        if len(reviews) < 100:
+            break
+        page += 1
+    return False
+
+
 def get_added_lines_per_file(repo: str, pr_number: str, token: str) -> dict[str, set[int]]:
     """Bouw {path: set(regelnummers)} van TOEGEVOEGDE regels (nieuwe nummering).
 
@@ -429,6 +471,24 @@ def main() -> int:
             commit_sha = get_pr_head_sha(repo, args.pr_number, token)
         except Exception as exc:  # noqa: BLE001
             print(f"kon head-sha niet ophalen: {exc}", file=sys.stderr)
+
+    # 4b. Dedup: deze head-SHA al formeel gereviewed? (marker in body of
+    # zelfde commit_id + Reviewer Guide) -> niet opnieuw posten.
+    if commit_sha:
+        try:
+            if already_reviewed(repo, args.pr_number, token, commit_sha):
+                print(
+                    f"(head {commit_sha[:8]} is al formeel gereviewed — geen "
+                    f"duplicaat review gepost)",
+                    file=sys.stderr,
+                )
+                return 0
+        except Exception as exc:  # noqa: BLE001
+            print(f"kon dedup-check niet uitvoeren ({exc}); ga door", file=sys.stderr)
+
+    # 4c. Marker in de review-body zodat latere runs de review herkennen.
+    if body and commit_sha:
+        body = body.rstrip() + "\n\n" + _review_marker(commit_sha)
 
     # 5. POST review
     payload: dict = {"event": event}
