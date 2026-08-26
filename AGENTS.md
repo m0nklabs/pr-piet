@@ -17,6 +17,12 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
 
 ## Harde regels (nooit overtreden)
 
+0. **Delegeer wachten & herbewerking aan subagents.** Lange GitHub Actions
+   runs, poll-loops (`sleep`/job-wachten), status-controles en logs-grep zijn
+   subagent-werk (`subagent` met `run_in_background: true`), NIET werk voor
+   de hoofd-agent. De hoofd-agent start delegaties parallel en doet andere
+   productieve stappen; poll niet in de hoofd-context. (Zie ook de
+   dsh-richtlijn over achtergrond-jobs: nooit busy-pollen in de hoofdlus.)
 1. **Alleen open-weights modellen.** `STRICT_OPEN_WEIGHTS_ONLY`:
    `deepseek/deepseek-v4-flash-0731` (tier 1) en `z-ai/glm-5.2` (tier 2,
    optionele second opinion). Nooit closed-weights modellen toevoegen.
