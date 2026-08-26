@@ -385,14 +385,32 @@ def main() -> int:
         # de markdown-body komt uit de issue-comment.
         try:
             comments_ = fetch_issue_comments(repo, args.pr_number, token)
-            candidates = [
+
+            def _pick(cands, key) -> str:
+                return max(cands, key=key).get("body") or ""
+
+            # Eerst de recente comment (>=since). Levert dat niets op (bv. de
+            # review-JSON miste en pr-agent update een OUDERE comment), val dan
+            # terug op de meest recente review-guide-comment óverall zónder
+            # since-filter — de samenvatting blijft dan altijd posten.
+            recent = [
                 c for c in comments_
                 if (not args.since or c.get("updated_at", "") >= args.since)
                 and args.heading in c.get("body", "")
             ]
-            if candidates:
-                latest = max(candidates, key=lambda c: c.get("updated_at", ""))
-                body = latest.get("body") or ""
+            if recent:
+                body = _pick(recent, lambda c: c.get("updated_at", ""))
+            else:
+                any_c = [
+                    c for c in comments_ if args.heading in c.get("body", "")
+                ]
+                if any_c:
+                    body = _pick(any_c, lambda c: c.get("updated_at", ""))
+                    print(
+                        f"(geen review-guide-comment ná since; fallback naar de "
+                        f"meest recente ({any_c[0].get('updated_at','?')}))",
+                        file=sys.stderr,
+                    )
         except Exception as exc:  # noqa: BLE001
             print(f"kon review-body niet ophalen: {exc}", file=sys.stderr)
 
@@ -402,15 +420,27 @@ def main() -> int:
     suggestions_body = ""
     try:
         comments_ = fetch_issue_comments(repo, args.pr_number, token)
-        s_candidates = [
+        s_recent = [
             c for c in comments_
             if (not args.since or c.get("updated_at", "") >= args.since)
             and args.suggestions_heading in c.get("body", "")
         ]
-        if s_candidates:
+        if s_recent:
             suggestions_body = max(
-                s_candidates, key=lambda c: c.get("updated_at", "")
+                s_recent, key=lambda c: c.get("updated_at", "")
             ).get("body") or ""
+        else:
+            s_any = [
+                c for c in comments_ if args.suggestions_heading in c.get("body", "")
+            ]
+            if s_any:
+                suggestions_body = max(
+                    s_any, key=lambda c: c.get("updated_at", "")
+                ).get("body") or ""
+                print(
+                    "(geen suggestions-comment ná since; fallback naar meest recente)",
+                    file=sys.stderr,
+                )
     except Exception as exc:  # noqa: BLE001
         print(f"kon /improve-comment niet ophalen: {exc}", file=sys.stderr)
 
