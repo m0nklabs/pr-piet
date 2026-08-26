@@ -146,6 +146,15 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `config/.pr_agent.toml` én de workflow-env (`config.ai_timeout`, tier 1 én
   2 — de env overschrijft de toml, dus beide consistent houden). Verhoog
   nooit boven de provider-cap.
+- **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
+  gemerged is op het moment dat de run start, is een review nutteloos
+  (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`
+  guard die `gh api pulls/{n}` checkt en de hele job skipt zodra `state !=
+  open`. Alle vervolgsteps (model, submit, detect) dragen
+  `if: steps.pr-state.outputs.closed != 'true'`. Tier2 skipt automatisch mee
+  (zijn `tier1_clean`-output ontbreekt dan). Dit dekt het race-venster
+  "PR gesloten tussen trigger en run-start" — bv. PR #2 (gemerged 22:44,
+  run gestart 22:53) dat anders onnodig 23+ min modeltijd verbruikte.
 - **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
   Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
   (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).
