@@ -82,6 +82,14 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `## PR Reviewer Guide 🔍` (pr_agent/algo/utils.py `PRReviewHeader`). De
   `pr_reviewer.review_heading`-setting werkt alleen in de klassieke stijl;
   de tier-detectie matcht daarom op de vaste header "PR Reviewer Guide".
+- **Formele GitHub review (Copilot-look):** `scripts/submit_review.py` zet de
+  pr-agent review-JSON om naar `POST /pulls/{n}/reviews` met `event` +
+  `comments[]` (inline threads). De review-JSON komt **wel** door via
+  `github_action_config.enable_output=true` (GITHUB_OUTPUT werkt ook vanuit
+  de docker action — geverifieerd 2026-08-26 op PR #4
+  guardian-llmprovider-gateway: `CHANGES_REQUESTED` + body + 2 inline
+  threads). De markdown-body wordt altijd uit de zojuist geplaatste
+  issue-comment gehaald (pr-agent post die sowieso).
 - **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
   Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
   (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).

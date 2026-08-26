@@ -27,6 +27,7 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
 | Security | map-job **zonder secrets**, review-jobs met secrets | PR-code is untrusted; secrets alleen waar pr-agent ze nodig heeft |
 | Models | `deepseek/deepseek-v4-flash-0731` (tier 1), `z-ai/glm-5.2` (tier 2) | Beide open-weights, live in de gateway-catalog |
 | Fail-safes | geen `fallback_models`; truncate naar diff-only bij overflow | Model-fouten worden zichtbaar, context-overflow degradeert netjes |
+| Publicatie | Formele GitHub review via REST API (Copilot-look) | `submit_review.py` zet de pr-agent JSON-output om naar `POST /pulls/{n}/reviews` met `event` (CHANGES_REQUESTED/COMMENT) + inline comment-threads; de "PR Reviewer Guide"-markdown wordt de review-body |
 
 ## Gebruik in een doel-repo
 
@@ -122,6 +123,32 @@ python3 -m venv .venv
 | `.github/workflows/reusable-pr-piet.yml` | Reusable workflow: map + tier1 + tier2 |
 | `scripts/repo_mapper.py` | Tree-sitter + PageRank repo-map (stdlib + tree-sitter) |
 | `scripts/detect_review_clean.py` | Tier-2 poortwachter ("No major issues detected"?) |
+| `scripts/submit_review.py` | Converter: pr-agent JSON-output → formele GitHub review (REST API, Copilot-look) |
 | `config/.pr_agent.toml` | PR-Agent config (models, budget, extra_instructions) |
 | `examples/caller-pr-piet.yml` | Voorbeeld-caller voor doel-repos |
 | `AGENTS.md` | Canonieke agent-context (lees dit eerst) |
+
+## Formele GitHub review (Copilot-look)
+
+De tier-1 review wordt óók als **formele pull-request review** gepost via de
+GitHub reviews REST API, zodat de PR eruitziet zoals een Copilot-review:
+
+- **state-badge**: `CHANGES_REQUESTED` (key issues gevonden) of `COMMENT`
+  (schoon) — ingesteld als `event` op `POST /repos/{o}/{r}/pulls/{n}/reviews`
+- **inline comment-threads** op de diff (`path`/`line`/`side`/`body` per key
+  issue uit de pr-agent JSON-output)
+- **review-body**: de "PR Reviewer Guide"-markdown (uit de issue-comment)
+
+Flow:
+```
+pr-agent action (github_action_config.enable_output=true)
+  └─ review-JSON → step-output (GITHUB_OUTPUT; werkt óók vanuit de docker action)
+submit_review.py (met GITHUB_TOKEN)
+  └─ body uit issue-comment + comments[] uit JSON
+     → POST /pulls/{n}/reviews { event, body, comments }
+formele review: badge + threads (Copilot-look)
+```
+> Let op: pr-agent plaatst de review **zowel** als issue-comment (de klassieke
+> "PR Reviewer Guide"-tab) **als** (via onze converter) als formele review.
+> Dit is bewust voor nu: de issue-comment blijft de bron voor de tier-2
+> poortwachter (`detect_review_clean.py`).
