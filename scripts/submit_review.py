@@ -204,7 +204,17 @@ def main() -> int:
     # 3. Event bepalen
     event = args.event
     if event == "auto":
-        event = "REQUEST_CHANGES" if comments else "COMMENT"
+        if comments:
+            event = "REQUEST_CHANGES"
+        elif review_data is None and body:
+            # Fallback-route (geen JSON): leid het event af uit de body.
+            event = (
+                "COMMENT"
+                if "no major issues detected" in body.lower()
+                else "REQUEST_CHANGES"
+            )
+        else:
+            event = "COMMENT"
 
     # 4. Head commit-sha
     commit_sha = args.commit_sha or ""
