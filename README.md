@@ -52,7 +52,7 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
 | `enable_tier2` | `true` | Tier-2 second opinion aan/uit |
 | `model_tier1` | `openai/deepseek/deepseek-v4-flash-0731` | Tier-1 model via gateway |
 | `model_tier2` | `openai/z-ai/glm-5.2` | Tier-2 model via gateway |
-| `gateway_base_url` | `http://127.0.0.1:11436/v1` | OpenAI-compatibele gateway URL (runners op ai-kvm2) |
+| `gateway_base_url` | `http://172.17.0.1:11434/v1` | OpenAI-compatibele gateway URL (bereikbaar vanuit docker-container via host-bridge) |
 | `auto_describe` / `auto_improve` | `true` / `true` | Auto-tools bij PR-opened |
 | `response_language` | `en-US` | Taal van pr-agent output |
 | `max_context_tokens` | `4096` | Token-budget repo-map |

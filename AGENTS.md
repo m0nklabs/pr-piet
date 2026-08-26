@@ -68,6 +68,10 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   marketplace action `the-pr-agent/pr-agent@main`).
 - **De action leest `OPENAI_KEY`** (runner: `github_action_runner.py`), niet
   `OPENAI__KEY`. De api_base gaat via `OPENAI.API_BASE` env.
+- **Vanuit docker-containers (pr-agent action) is de gateway bereikbaar op
+  `http://172.17.0.1:11434/v1`** (docker bridge → host nginx plain-HTTP,
+  geverifieerd 2026-08-26 met HTTP 200). `127.0.0.1:11436` is host-loopback
+  only en werkt niet vanuit een container.
 - **`extra_instructions` is een inline string** — geen file://-mechanisme.
   De `artifact_path`-input van de action injecteert een bestand in
   `extra_instructions` van pr_reviewer/pr_description/pr_code_suggestions.

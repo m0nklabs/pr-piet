@@ -39,6 +39,6 @@ jobs:
       auto_describe: true
       auto_improve: true
       response_language: en-US
-      # gateway_base_url: http://127.0.0.1:11436/v1  (default; runners op ai-kvm2)
+      # gateway_base_url: http://172.17.0.1:11434/v1  (default; container -> host-bridge -> nginx)
     secrets:
       GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}
