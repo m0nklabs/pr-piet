@@ -203,7 +203,6 @@ jobs:
           # honderden KB); de PR-Piet repo-map is de primaire context.
           config.repo_context_max_lines: "300"
           config.response_language: ${{ inputs.response_language }}
-          pr_reviewer.review_heading: "PR-Piet Review (tier 1)"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: ${{ inputs.auto_describe }}
           github_action_config.auto_improve: ${{ inputs.auto_improve }}
@@ -216,7 +215,7 @@ jobs:
         run: |
           clean=$(python3 pr-piet/scripts/detect_review_clean.py \
             "${{ inputs.pr_number }}" \
-            "PR-Piet Review (tier 1)" \
+            "PR Reviewer Guide" \
             "${{ steps.ts.outputs.since }}")
           echo "tier1_clean=${clean}" >> "$GITHUB_OUTPUT"
           echo "tier1_clean=${clean}"
@@ -269,7 +268,6 @@ jobs:
           config.large_patch_policy: "clip"
           config.repo_context_max_lines: "300"
           config.response_language: ${{ inputs.response_language }}
-          pr_reviewer.review_heading: "PR-Piet Review (tier 2)"
           # Tier 2 is uitsluitend een review (second opinion).
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"

@@ -78,6 +78,10 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
 - **Tier-2 poortwachter-marker:** pr-agent schrijft exact
   `No major issues detected` in de review-comment als er geen key issues
   zijn (`scripts/detect_review_clean.py` matcht case-insensitief).
+- **Review-comment heading is hardcoded** in de nieuwe "Reviewer Guide"-stijl:
+  `## PR Reviewer Guide 🔍` (pr_agent/algo/utils.py `PRReviewHeader`). De
+  `pr_reviewer.review_heading`-setting werkt alleen in de klassieke stijl;
+  de tier-detectie matcht daarom op de vaste header "PR Reviewer Guide".
 - **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
   Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
   (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).
