@@ -177,20 +177,22 @@ def main() -> int:
                   file=sys.stderr)
 
     if not args.no_body:
-        if not review_data and args.heading:
-            # Fallback: haal de body uit de zojuist geplaatste issue-comment.
-            try:
-                comments = fetch_issue_comments(repo, args.pr_number, token)
-                candidates = [
-                    c for c in comments
-                    if (not args.since or c.get("updated_at", "") >= args.since)
-                    and args.heading in c.get("body", "")
-                ]
-                if candidates:
-                    latest = max(candidates, key=lambda c: c.get("updated_at", ""))
-                    body = latest.get("body") or ""
-            except Exception as exc:  # noqa: BLE001
-                print(f"kon fallback body niet ophalen: {exc}", file=sys.stderr)
+        # Body ALTIJD uit de zojuist geplaatste issue-comment halen (pr-agent
+        # schrijft de "PR Reviewer Guide"-markdown daar), ongeacht of we ook de
+        # JSON hebben. De JSON levert de gestructureerde key-issues (comments[]);
+        # de markdown-body komt uit de issue-comment.
+        try:
+            comments_ = fetch_issue_comments(repo, args.pr_number, token)
+            candidates = [
+                c for c in comments_
+                if (not args.since or c.get("updated_at", "") >= args.since)
+                and args.heading in c.get("body", "")
+            ]
+            if candidates:
+                latest = max(candidates, key=lambda c: c.get("updated_at", ""))
+                body = latest.get("body") or ""
+        except Exception as exc:  # noqa: BLE001
+            print(f"kon review-body niet ophalen: {exc}", file=sys.stderr)
 
     if not review_data and not body:
         print("(geen review geplaatst: geen review-JSON én geen review-comment gevonden)")
