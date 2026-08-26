@@ -51,6 +51,12 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    `commitable_code_suggestions = false`. De workflow mag nooit een review met
    event `APPROVE` posten en nooit een merge-API-aanroep doen. Merge gebeurt
    uitsluitend handmatig (human) op GitHub.
+9. **PR-Piet (de reviewer) wijzigt nooit code in doel-repos.** Suggesties
+   blijven suggesties (` ```suggestion ``` `-fence + Apply-knop voor de mens);
+   de reviewer past zelf nooit code toe of committ in een doel-repo. De enige
+   commits op PR-Piet's naam staan in `m0nklabs/pr-piet` zelf (de tooling: dit
+   project). In alle andere repos is PR-Piet uitsluitend reviewer — comments,
+   formele reviews, suggesties.
 
 ## Architectuur
 
@@ -112,6 +118,16 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   (onze harde regel 8) post pr-agent de suggesties ALLEEN als issue-comment,
   niet inline — onze converter hergebruikt die comment en plaatst ze inline
   mét Apply-knop via de reviews REST API.
+- **Inline threads vereisen een toegevoegde diff-regel (GitHub 422).** De
+  reviews REST API kan alleen comments plaatsen op `line` (side RIGHT) die in
+  de PR-diff staat als toegevoegde regel (`+`). Een key-issue op een
+  pure-deletie/context-regel (bv. `scripts/_paths.py` regel 1 in PR #2, diff
+  was `@@ -6,4 +6,3 @@` pure deletie) faalt met 422 "Line could not be
+  resolved", waardoor de héle inline-set werd gedropt. `submit_review.py`
+  bouwt daarom via `GET /pulls/{n}/files`+patch-hunks de set toegevoegde
+  regels per bestand (`get_added_lines_per_file`) en filtert niet-resolvable
+  threads (skip) — de samenvatting blijft altijd als formele review staan.
+  Dit is inherent aan de GitHub API, niet te omzeilen met lijn-nummering.
 - **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
   Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
   (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).
