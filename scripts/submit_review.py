@@ -504,12 +504,21 @@ def main() -> int:
 
     # 4b. Dedup: deze head-SHA al formeel gereviewed? (marker in body of
     # zelfde commit_id + Reviewer Guide) -> niet opnieuw posten.
-    if commit_sha:
+    #
+    # Belangrijk: dedup slaat ALLEEN toe als er géén verse review-data is uit
+    # de HUIDIGE run (review_data is None, dus we zouden een fallback-body van
+    # een oude issue-comment posten). Komt de review-JSON wél door (een échte
+    # nieuwe analyse), dan posten we altijd: een verse review moet een evt.
+    # stale review op dezelfde head vervangen (GitHub toont de laatste als de
+    # actieve review). Dedup is bedoeld om identieke hertriggers te stoppen,
+    # niet om een verse analyse te blokkeren.
+    if commit_sha and review_data is None:
         try:
             if already_reviewed(repo, args.pr_number, token, commit_sha):
                 print(
-                    f"(head {commit_sha[:8]} is al formeel gereviewed — geen "
-                    f"duplicaat review gepost)",
+                    f"(head {commit_sha[:8]} is al formeel gereviewed én er is "
+                    f"geen verse review-JSON uit deze run — geen duplicaat "
+                    f"fallback-review gepost)",
                     file=sys.stderr,
                 )
                 return 0
