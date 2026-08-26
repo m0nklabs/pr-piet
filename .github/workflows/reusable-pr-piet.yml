@@ -157,29 +157,51 @@ jobs:
     outputs:
       tier1_clean: ${{ steps.detect.outputs.tier1_clean }}
     steps:
+      - name: Skip als PR al gesloten/gemerged is
+        id: pr-state
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Een review op een al gesloten/gemergde PR is nutteloos (modeltijd
+          # weggooien). Check de PR-state en markeer de job als skipped zodra
+          # de PR niet meer open is. De rest van de job draait dan niet.
+          state=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" \
+            --jq '.state' 2>/dev/null || echo "?")
+          state_reason=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" \
+            --jq '.state_reason // ""' 2>/dev/null || echo "")
+          echo "PR #${{ inputs.pr_number }} state=$state reason=$state_reason"
+          if [ "$state" != "open" ]; then
+            echo "::notice::PR #${{ inputs.pr_number }} is $state (gesloten/gemerged) — review overgeslagen"
+            echo "closed=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Start-tijdstip (voor tier-2 detectie van de verse comment)
+        if: steps.pr-state.outputs.closed != 'true'
         id: ts
         run: echo "since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Clone pr-piet (scripts + config)
+        if: steps.pr-state.outputs.closed != 'true'
         run: |
           rm -rf pr-piet
           git clone --depth 1 --branch "${{ inputs.pr_piet_ref }}" \
             "https://github.com/${{ inputs.pr_piet_repo }}.git" pr-piet
 
       - name: Download repo-context
+        if: steps.pr-state.outputs.closed != 'true'
         uses: actions/download-artifact@v4
         with:
           name: pr-piet-context
           path: .pr_piet/
 
       - name: Koppel PR-Piet config
+        if: steps.pr-state.outputs.closed != 'true'
         run: |
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
           ls -la .pr_piet/
 
       - name: PR Agent (tier 1)
         id: pr-agent
+        if: steps.pr-state.outputs.closed != 'true'
 
         uses: the-pr-agent/pr-agent@main
         with:
@@ -217,6 +239,7 @@ jobs:
 
       - name: Submit formele GitHub review (Copilot-stijl)
         id: submit
+        if: steps.pr-state.outputs.closed != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -243,6 +266,7 @@ jobs:
 
       - name: Detecteer tier-1 resultaat (clean of findings)
         id: detect
+        if: steps.pr-state.outputs.closed != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
