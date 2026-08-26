@@ -188,12 +188,20 @@ jobs:
           # Guardian gateway (OpenAI-compatibel). Key = org-secret.
           OPENAI_KEY: ${{ secrets.GUARDIAN_API_KEY }}
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
-          # Onze config eerst (repo-local .pr_agent.toml + env overriden dit).
-          PR_AGENT_EXTRA_CONFIG_URL: ${{ github.workspace }}/.pr_piet/.pr_agent.toml
+          # Onze config eerst. Let op: de action draait in een docker-container,
+          # dus het pad is het CONTAINER-pad (/github/workspace), niet het
+          # runner-pad. (repo-local .pr_agent.toml + env overriden dit.)
+          PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           # Modellen: open-weights, GEEN fallback.
           config.model: ${{ inputs.model_tier1 }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
+          config.max_model_tokens: "64000"
+          config.ai_timeout: "300"
+          config.large_patch_policy: "clip"
+          # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
+          # honderden KB); de PR-Piet repo-map is de primaire context.
+          config.repo_context_max_lines: "300"
           config.response_language: ${{ inputs.response_language }}
           pr_reviewer.review_heading: "PR-Piet Review (tier 1)"
           github_action_config.auto_review: "true"
@@ -252,10 +260,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_KEY: ${{ secrets.GUARDIAN_API_KEY }}
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
-          PR_AGENT_EXTRA_CONFIG_URL: ${{ github.workspace }}/.pr_piet/.pr_agent.toml
+          PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           config.model: ${{ inputs.model_tier2 }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "131072"
+          config.max_model_tokens: "64000"
+          config.ai_timeout: "300"
+          config.large_patch_policy: "clip"
+          config.repo_context_max_lines: "300"
           config.response_language: ${{ inputs.response_language }}
           pr_reviewer.review_heading: "PR-Piet Review (tier 2)"
           # Tier 2 is uitsluitend een review (second opinion).
