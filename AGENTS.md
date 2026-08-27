@@ -79,8 +79,10 @@ doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
        ├─ job map          : checkout PR-head, scripts/repo_mapper.py
        │                    (tree-sitter symbols + PageRank) -> .pr_piet/context.md
        │                    → upload-artifact (geen secrets in deze job)
-       ├─ job review_tier1 : the-pr-agent/pr-agent@main met
-       │                    artifact_path=.pr_piet/context.md,
+       ├─ job review_tier1 : m0nklabs/pr-agent@main (ONZE FORK van
+       │                    The-PR-Agent/pr-agent; patch: conditional
+       │                    suggested_fix veld, zie PR-PIET-PATCH.md daar)
+       │                    met artifact_path=.pr_piet/context.md,
        │                    model=openai/deepseek/deepseek-v4-flash-0731,
        │                    fallback_models=[], OPENAI.API_BASE=gateway
        │                    → detect_review_clean.py (tier1_clean output)
@@ -159,19 +161,21 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `config/.pr_agent.toml` én de workflow-env (`config.ai_timeout`, tier 1 én
   2 — de env overschrijft de toml, dus beide consistent houden). Verhoog
   nooit boven de provider-cap.
-- **Single-call mode (EXPERIMENTEEL): 1 modelcall i.p.v. 2 voor review+suggesties.**
+- **Single-call mode (via pr-agent-fork): 1 modelcall i.p.v. 2 voor review+suggesties.**
   Standaard draait de combined-flow `/review` + `/improve` = **2** modelcalls per PR.
   Met de input `single_call_review: true` (default `false`) draait er **1** call:
-  `/review` produceert óók ` ```diff ``` `-suggestieblokken (instructie wordt aan
-  `context.md` toegevoegd via `config/single_call_prompt.md`, aangezien de
-  artifact `extra_instructions` van `pr_reviewer` vervangt), `auto_improve` wordt
-  geforceerd `false`, en `submit_review.py` haalt de suggesties uit de review-body
-  zelf (`build_single_call_suggestions`, via env `PR_PIET_SINGLE_CALL=1`) i.p.v.
-  uit een aparte "PR Code Suggestions"-comment. Suggesties worden aan een echte
-  diff-regel gekoppeld (valid_paths = besteande PR-bestanden, `_auto_line` →
-  eerste toegevoegde regel). **Terugdraaien = één vlag:** zet `single_call_review`
-  weer op `false` (of weg) → 2-call gedrag. Default blijft `false` (bewust, omdat
-  één gezamenlijke call iets minder diepe suggesties geeft dan dedicated `/improve`).
+  de action gebruikt onze fork **`m0nklabs/pr-agent`** (= upstream `The-PR-Agent/pr-agent`
+  + patch, zie `PR-PIET-PATCH.md` in die repo) die met
+  `pr_reviewer.require_suggested_fix=true` het model per key-issue om de **exacte
+  vervangingscode** vraagt (`suggested_fix`, voor `start_line..end_line`). Dat veld
+  stroomt via `github_action_config.enable_output` in de review-JSON, en
+  `submit_review.py` wikkelt het in een ` ```suggestion ``` `-fence (Apply-knop) in de
+  formele review; multi-line fixes worden multi-line comments (`start_line`+`line`).
+  Eerste poging (losse ````diff```-blokken in de review-body vragen via context.md)
+  faalde: het model volgt het vaste reviewer-schema, geen diff-blokken — vandaar de
+  fork. **Terugdraaien (2 stappen, onafhankelijk):** (1) zet `single_call_review` weer
+  op `false` (caller-input) → 2-call gedrag; (2) wil je helemaal van de fork af: zet
+  `uses:` in de workflow terug naar `the-pr-agent/pr-agent@main`. Default blijft `false`.
 - **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
   gemerged is op het moment dat de run start, is een review nutteloos
   (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`

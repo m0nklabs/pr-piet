@@ -22,7 +22,7 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
 
 | Onderdeel | Keuze | Waarom |
 |---|---|---|
-| Runtime | `the-pr-agent/pr-agent@main` (marketplace action) | Officieel onderhouden; `artifact_path`-input injecteert repo-context natively in de prompts |
+| Runtime | `m0nklabs/pr-agent@main` (onze fork van The-PR-Agent/pr-agent; patch: conditional `suggested_fix` veld, zie `PR-PIET-PATCH.md` in de fork) | Upstream-compatible + single-call review+suggesties in 1 modelcall; `artifact_path`-input injecteert repo-context natively in de prompts |
 | Context | `scripts/repo_mapper.py` (tree-sitter + PageRank) | Aider-stijl: gewijzigde symbolen + callers/callees, gecomprimeerd naar ~4k tokens |
 | Security | map-job **zonder secrets**, review-jobs met secrets | PR-code is untrusted; secrets alleen waar pr-agent ze nodig heeft |
 | Models | `deepseek/deepseek-v4-flash-0731` (tier 1), `z-ai/glm-5.2` (tier 2) | Beide open-weights, live in de gateway-catalog |
@@ -137,20 +137,22 @@ GitHub reviews REST API, zodat de PR eruitziet zoals een Copilot-review:
   (schoon) — ingesteld als `event` op `POST /repos/{o}/{r}/pulls/{n}/reviews`
 - **inline comment-threads** op de diff (`path`/`line`/`side`/`body` per key
   issue uit de pr-agent JSON-output)
-- **code-suggesties met Apply-knop**: de `/improve`-suggesties worden ook
-  opgenomen als inline threads, maar dan omgezet naar een
-  ` ```suggestion ``` `-fence (de voorgestelde code), zodat GitHub er een
-  "Apply"-knop bij toont — precies zoals Copilot-suggesties.
+- **code-suggesties met Apply-knop**: óf de `/improve`-suggesties (standaard
+  2-call flow), óf — in `single_call_review`-modus — de `suggested_fix`-velden
+  die het model per key-issue meelevert (onze pr-agent-fork). Beide worden
+  omgezet naar een ` ```suggestion ``` `-fence (de voorgestelde code), zodat
+  GitHub er een "Apply"-knop bij toont — precies zoals Copilot-suggesties.
 - **review-body**: de "PR Reviewer Guide"-markdown (uit de issue-comment)
 
-De converter combineert `/review` + `/improve` in **één** formele review
-(`submit_review.py`):
+### Twee modi
+
+**Standaard (2 modelcalls):** `/review` + `/improve` → `submit_review.py`
+combineert ze in **één** formele review:
 1. key-issues (uit de review-JSON) → textuele inline threads
 2. `/improve`-suggesties (uit de "PR Code Suggestions"-comment) → ` ```diff ``` `
    blokken omgezet naar ` ```suggestion ``` `-fences → inline threads met
    Apply-knop
 
-Flow:
 ```
 pr-agent action (github_action_config.enable_output=true,
                  auto_review=true, auto_improve=true)
@@ -163,6 +165,27 @@ submit_review.py (met GITHUB_TOKEN)
      → POST /pulls/{n}/reviews { event, body, comments }
 formele review: badge + threads (tekst) + threads (Apply-knop)
 ```
+
+**Single-call (1 modelcall, input `single_call_review: true`):** gebruikt onze
+fork `m0nklabs/pr-agent` (upstream The-PR-Agent/pr-agent + `suggested_fix`-patch,
+zie `PR-PIET-PATCH.md` in die repo). `auto_improve` wordt uitgezet en
+`pr_reviewer.require_suggested_fix=true` vraagt het model in dézelfde
+review-call om de exacte vervangingscode per key-issue:
+
+```
+pr-agent action (fork, auto_review=true, auto_improve=false,
+                 pr_reviewer.require_suggested_fix=true)
+  └─ review-JSON → step-output, key_issues_to_review[].suggested_fix
+submit_review.py (met GITHUB_TOKEN, PR_PIET_SINGLE_CALL=1)
+  ├─ body uit "PR Reviewer Guide"-comment
+  └─ key-issues + suggested_fix → textuele thread mét ```suggestion```-fence
+     (multi-line fix → multi-line comment) → POST /pulls/{n}/reviews
+formele review: badge + threads (tekst + Apply-knop in één)
+```
+
+Terugdraaien naar 2 calls: `single_call_review: false` (of weg) in de caller.
+Helemaal van de fork af: `uses:` terugzetten naar `the-pr-agent/pr-agent@main`.
+
 > Let op: pr-agent plaatst de review **zowel** als issue-comment (de klassieke
 > "PR Reviewer Guide"-tab) **als** (via onze converter) als formele review.
 > Dit is bewust voor nu: de issue-comment blijft de bron voor de tier-2
