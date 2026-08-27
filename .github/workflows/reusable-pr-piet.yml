@@ -70,6 +70,11 @@ on:
         required: false
         type: boolean
         default: true
+      single_call_review:
+        description: "EXPERIMENTEEL: combineer /review + /improve in ÉÉN modelcall (standaard=false = oude 2-call gedrag). Zet deze op true om 1 call/PR te doen; /improve wordt dan niet apart gedraaid en suggesties komen uit de review-body. Makkelijk terug te draaien: zet weer op false."
+        required: false
+        type: boolean
+        default: false
       response_language:
         description: "Taal van pr-agent output (ISO 639/3166, bijv. en-US of nl-NL)."
         required: false
@@ -121,6 +126,7 @@ jobs:
           BASE_REF: ${{ inputs.base_branch || github.event.repository.default_branch }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           MAX_TOKENS: ${{ inputs.max_context_tokens }}
+          SINGLE_CALL: ${{ inputs.single_call_review }}
         run: |
           head_sha="${HEAD_SHA:-$(git rev-parse HEAD)}"
           echo "base=origin/${BASE_REF} head=${head_sha}"
@@ -131,6 +137,14 @@ jobs:
             --output .pr_piet/context.md \
             --max-tokens "${MAX_TOKENS}" \
             --json
+          # EXPERIMENTEEL single-call-modus: vraag het model om in de review
+          # OOK concrete suggestie-diff-blokken op te nemen (i.p.v. een aparte
+          # /improve-call). Deze instructie (uit een apart bestand, om YAML-
+          # parsing van de ```diff```-fence te vermijden) landt in de
+          # review-call via de artifact die extra_instructions vervangt.
+          if [ "${SINGLE_CALL}" = "true" ]; then
+            cat "pr-piet/config/single_call_prompt.md" >> .pr_piet/context.md
+          fi
 
       - name: Upload context artifact
         uses: actions/upload-artifact@v4
@@ -228,7 +242,9 @@ jobs:
           config.response_language: ${{ inputs.response_language }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: ${{ inputs.auto_describe }}
-          github_action_config.auto_improve: ${{ inputs.auto_improve }}
+          # In single-call-modus géén aparte /improve-call (de suggesties komen
+          # dan uit de review zelf). Anders: de gevraagde auto_improve.
+          github_action_config.auto_improve: ${{ inputs.single_call_review && 'false' || inputs.auto_improve }}
           # Schrijf de gestructureerde review-JSON naar de step-output, zodat
           # wij die kunnen omzetten naar een formele GitHub review (Copilot-look).
           github_action_config.enable_output: "true"
@@ -244,6 +260,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           REVIEW_JSON: ${{ steps.pr-agent.outputs.review }}
+          # Single-call-modus: suggesties halen uit de review-body i.p.v. uit
+          # een aparte /improve-comment.
+          PR_PIET_SINGLE_CALL: ${{ inputs.single_call_review }}
         run: |
           if [ -n "${REVIEW_JSON}" ]; then
             printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review.json

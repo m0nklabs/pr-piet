@@ -159,6 +159,19 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `config/.pr_agent.toml` én de workflow-env (`config.ai_timeout`, tier 1 én
   2 — de env overschrijft de toml, dus beide consistent houden). Verhoog
   nooit boven de provider-cap.
+- **Single-call mode (EXPERIMENTEEL): 1 modelcall i.p.v. 2 voor review+suggesties.**
+  Standaard draait de combined-flow `/review` + `/improve` = **2** modelcalls per PR.
+  Met de input `single_call_review: true` (default `false`) draait er **1** call:
+  `/review` produceert óók ` ```diff ``` `-suggestieblokken (instructie wordt aan
+  `context.md` toegevoegd via `config/single_call_prompt.md`, aangezien de
+  artifact `extra_instructions` van `pr_reviewer` vervangt), `auto_improve` wordt
+  geforceerd `false`, en `submit_review.py` haalt de suggesties uit de review-body
+  zelf (`build_single_call_suggestions`, via env `PR_PIET_SINGLE_CALL=1`) i.p.v.
+  uit een aparte "PR Code Suggestions"-comment. Suggesties worden aan een echte
+  diff-regel gekoppeld (valid_paths = besteande PR-bestanden, `_auto_line` →
+  eerste toegevoegde regel). **Terugdraaien = één vlag:** zet `single_call_review`
+  weer op `false` (of weg) → 2-call gedrag. Default blijft `false` (bewust, omdat
+  één gezamenlijke call iets minder diepe suggesties geeft dan dedicated `/improve`).
 - **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
   gemerged is op het moment dat de run start, is een review nutteloos
   (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`

@@ -196,12 +196,25 @@ def filter_resolvable_comments(
     Retourneert (resolvable_comments, aantal_overgeslagen). Niet-resolvable
     threads (bv. op een pure-deletie-regel) worden overgeslagen i.p.v. dat de
     héle review faalt met 422.
+
+    Single-call-suggesties (`_auto_line=True`) hebben geen betrouwbaar
+    lijnnummer; die koppelen we aan de EERSTE toegevoegde regel van het bestand
+    (zodra het bestand in de diff staat). Anders skippen we ze.
     """
     kept: list[dict] = []
     skipped = 0
     for c in comments:
         path = c.get("path", "")
         line = c.get("line")
+        if c.get("_auto_line"):
+            lines = added_lines.get(path)
+            if lines:
+                c["line"] = min(lines)  # eerste toegevoegde regel als anchor
+                c.pop("_auto_line", None)
+                kept.append(c)
+            else:
+                skipped += 1
+            continue
         if path in added_lines and isinstance(line, int) and line in added_lines[path]:
             kept.append(c)
         else:
@@ -342,6 +355,65 @@ def build_suggestion_comments(suggestions_body: str) -> list:
     return comments
 
 
+# Pad-heuristiek voor single-call-modus: een token dat op een bestandspad lijkt
+# (optioneel voorafgegaan door subdirs, eindigend op een bekende extensie).
+_PATH_TOKEN_RE = re.compile(
+    r"(?:[A-Za-z0-9_./-]+/)?[A-Za-z0-9_][A-Za-z0-9_.-]*\."
+    r"(?:py|js|ts|go|rs|java|c|cc|cpp|h|sh|yaml|yml|json|toml|md|txt|html|css|sql)"
+)
+
+
+def build_single_call_suggestions(review_body: str, valid_paths: set[str] | None = None) -> list:
+    """Single-call-modus: zet losse ```diff```-blokken uit de review-BODY om naar
+    suggestion-comments[]. (In deze modus draait er géén aparte /improve-call;
+    het model plaatst de diff-blokken direct in de review-guide, meestal met een
+    bestandsnaam in de proza ervoor.)
+
+    We koppelen elk ```diff```-blok aan het dichtstbijzijnde bestandspad-token
+    vóór het blok. Als `valid_paths` (de bestanden in de PR-diff) is gegeven,
+    filteren we daarop — anders pakt de heuristiek soms valse paden (bv.
+    `hmac.c` uit `hmac.compare_digest(...)`). Een blok zonder geldig pad wordt
+    overgeslagen (kan toch geen resolvable inline-thread worden).
+    """
+    if not review_body:
+        return []
+    comments: list = []
+    idx = 0
+    while True:
+        blk = _DIFF_BLOCK_RE.search(review_body, idx)
+        if not blk:
+            break
+        if blk.start() == 0:
+            idx = blk.end()
+            continue
+        prose = review_body[max(0, blk.start() - 600):blk.start()]
+        cands = [m.group(0).strip() for m in _PATH_TOKEN_RE.finditer(prose)]
+        path = None
+        if valid_paths:
+            # kies de kandidaat die ECHT in de diff zit (achterste eerst)
+            for cand in reversed(cands):
+                if cand in valid_paths:
+                    path = cand
+                    break
+        else:
+            if cands:
+                path = cands[-1]
+        if not path or path.startswith("http"):
+            idx = blk.end()
+            continue
+        new_code = _parse_suggestion_diff(blk.group("body"))
+        comment_body = (
+            f"**Suggestion:** `{path}`\n\n"
+            f"```suggestion\n{new_code.rstrip()}\n```"
+        )
+        comments.append({
+            "path": path, "line": 1, "side": "RIGHT", "body": comment_body,
+            "_auto_line": True,  # single-call: lijnnummer onbekend, koppel aan eerste toegevoegde regel
+        })
+        idx = blk.end()
+    return comments
+
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
@@ -414,43 +486,71 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"kon review-body niet ophalen: {exc}", file=sys.stderr)
 
-    # 2a. Code-suggesties (/improve): haal de "PR Code Suggestions"-comment op
-    # en zet de ```diff```-blokken om naar ```suggestion```-fences. Deze en de
-    # key-issues samen vormen de inline comments[] van de formele review.
+    # 2a. Code-suggesties. Twee modi:
+    #  - Normaal: haal de "PR Code Suggestions"-comment (/improve) op en zet de
+    #    ```diff```-blokken om naar ```suggestion```-fences (Apply-knop).
+    #  - PR_PIET_SINGLE_CALL=1 (EXPERIMENTEEL): er is géén aparte /improve-call;
+    #    de suggestie-diff-blokken zitten in de review-body zelf ("PR Reviewer
+    #    Guide"), gevraagd via de context-instructie. Bouw de fences daaruit.
     suggestions_body = ""
-    try:
-        comments_ = fetch_issue_comments(repo, args.pr_number, token)
-        s_recent = [
-            c for c in comments_
-            if (not args.since or c.get("updated_at", "") >= args.since)
-            and args.suggestions_heading in c.get("body", "")
-        ]
-        if s_recent:
-            suggestions_body = max(
-                s_recent, key=lambda c: c.get("updated_at", "")
-            ).get("body") or ""
-        else:
-            s_any = [
-                c for c in comments_ if args.suggestions_heading in c.get("body", "")
+    single_call = os.environ.get("PR_PIET_SINGLE_CALL", "").strip().lower() in (
+        "1", "true", "yes",
+    )
+    if single_call:
+        # In single-call-modus zitten de ```diff```-blokken in dezelfde body die
+        # we als review samenvatting gebruiken. Gebruik die als suggestiebron.
+        suggestions_body = body
+        print("(single-call-modus: suggesties uit de review-body zelf)",
+              file=sys.stderr)
+    else:
+        try:
+            comments_ = fetch_issue_comments(repo, args.pr_number, token)
+            s_recent = [
+                c for c in comments_
+                if (not args.since or c.get("updated_at", "") >= args.since)
+                and args.suggestions_heading in c.get("body", "")
             ]
-            if s_any:
+            if s_recent:
                 suggestions_body = max(
-                    s_any, key=lambda c: c.get("updated_at", "")
+                    s_recent, key=lambda c: c.get("updated_at", "")
                 ).get("body") or ""
-                print(
-                    "(geen suggestions-comment ná since; fallback naar meest recente)",
-                    file=sys.stderr,
-                )
-    except Exception as exc:  # noqa: BLE001
-        print(f"kon /improve-comment niet ophalen: {exc}", file=sys.stderr)
+            else:
+                s_any = [
+                    c for c in comments_ if args.suggestions_heading in c.get("body", "")
+                ]
+                if s_any:
+                    suggestions_body = max(
+                        s_any, key=lambda c: c.get("updated_at", "")
+                    ).get("body") or ""
+                    print(
+                        "(geen suggestions-comment ná since; fallback naar meest recente)",
+                        file=sys.stderr,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            print(f"kon /improve-comment niet ophalen: {exc}", file=sys.stderr)
 
     if not review_data and not body:
         print("(geen review geplaatst: geen review-JSON én geen review-comment gevonden)")
         return 0
 
-    # 2. Inline comments uit de JSON (key-issues) + /improve-suggesties
+    # 2. Inline comments uit de JSON (key-issues) + suggesties
     comments = build_inline_comments(review_data) if review_data else []
-    suggestion_comments = build_suggestion_comments(suggestions_body)
+    # Haal de diff (pad -> toegevoegde regels) op; nodig zowel voor de
+    # single-call padkoppeling (alleen echte diff-bestanden) als voor de
+    # resolvable-filter hieronder.
+    added_lines: dict = {}
+    if comments or single_call:
+        try:
+            added_lines = get_added_lines_per_file(repo, args.pr_number, token)
+        except Exception as exc:  # noqa: BLE001
+            print(f"kon diff-regels niet ophalen ({exc})", file=sys.stderr)
+            added_lines = {}
+    if single_call:
+        suggestion_comments = build_single_call_suggestions(
+            suggestions_body, valid_paths=set(added_lines.keys())
+        )
+    else:
+        suggestion_comments = build_suggestion_comments(suggestions_body)
     comments.extend(suggestion_comments)
 
     # 2b. Filter: alleen threads waarvan de locatie op een TOEGEVOEGDE diff-regel
@@ -458,7 +558,6 @@ def main() -> int:
     # threads overslaan, de rest posten — de samenvatting blijft altijd staan.
     if comments:
         try:
-            added_lines = get_added_lines_per_file(repo, args.pr_number, token)
             comments, skipped = filter_resolvable_comments(comments, added_lines)
             if skipped:
                 print(
