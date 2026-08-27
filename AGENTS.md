@@ -223,6 +223,35 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `z-ai/glm-5.3`, `moonshotai/kimi-k3`. De modellen uit de oorspronkelijke
   spec (`deepseek-chat`, `qwen-2.5-coder-32b`, `deepseek-r1`) staan er NIET in.
 
+## Dynamische commit-identity (auteur/committer = LLM-modelnaam)
+
+Sinds 2026-08-27 is de git-identity op deze host niet meer automatisch `PR-Piet`.
+Optie B (operator-besluit): commits moeten herleidbaar zijn naar het model dat ze
+maakte — `deepseek-v4-flash-0731` (tier 1 / de implementerende pi-agent) of
+`glm-5.2`. Implementatie in `bin/` (+ geïnstalleerd):
+
+- **`bin/git-agent-identity.sh`** — bepaalt de modelnaam (prioriteit
+  `AGENT_MODEL`/`PI_MODEL` env → `~/.pi/agent/settings.json` `defaultModel`
+  → de `guardian/openrouter/<model>`-suffix) en exporteert `GIT_AUTHOR_*`/
+  `GIT_COMMITTER_*` op `<model>@m0nklabs.dev`.
+- **`gc`-shellfunctie** (in `~/.bashrc` via
+  `bin/install-dynamic-commit-identity.sh`) — zet die env in HETZELFDE proces
+  voordat `git commit` draait (bewezen: anders negeert git de identity).
+  Override per commit: `AGENT_MODEL=glm-5.2 gc ...`.
+- **Per-checkout lokale config** — voor checkouts waar de implementerende
+  agent werkt (bv. `/home/flip/guardian-llmprovider-gateway`) is `user.name`/
+  `user.email` op de modelnaam gezet, zodat ook niet-interactieve shells /
+  andere git-tools de juiste identity gebruiken.
+
+**Waarom géén hook/alias (bewezen, niet overdoen):** een `prepare-commit-msg`-hook
+kan de auteur niet wijzigen (git legt die vóór de hook vast); git negeert een
+`alias.commit` omdat `commit` een builtin is. Enige werkende routes zijn env-in-
+hetzelfde-proces (`gc`) of per-checkout config.
+
+**Terugdraaien:** `bin/install-dynamic-commit-identity.sh --unset <dir>` zet
+lokale identity terug; de `gc`-blok in `~/.bashrc` verwijderen herstelt het
+oude gedrag; de global identity van de host is `PR-Piet <pr-piet@m0nklabs.dev>`.
+
 ## Veilige workflows
 
 - Mapper lokaal testen: zie README ("Lokale test").
