@@ -51,16 +51,25 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    `commitable_code_suggestions = false`. De workflow mag nooit een review met
    event `APPROVE` posten en nooit een merge-API-aanroep doen. Merge gebeurt
    uitsluitend handmatig (human) op GitHub.
-9. **PR-Piet maakt nooit PR's en zet nooit commits in een PR. PR-Piet gaat
-   alleen over de setup en het onderhoud van de PR-review-stack zelf.**
-   Concreet: PR-Piet opent géén pull request (in welke repo dan ook) en zet
-   géén commit in een bestaande PR. Het mandaat is beperkt tot de
-   review-infra: de reusable workflow, de `submit_review.py`-converter, de
-   config en de documentatie van deze stack (wijzigen van bestanden in dit
-   repo = stack-onderhoud, géén feature-werk). Suggesties blijven suggesties
-   (` ```suggestion ``` `-fence + Apply-knop voor de mens); de reviewer past
-   zelf nooit code toe. In doel-repos is PR-Piet uitsluitend reviewer —
-   comments, formele reviews, suggesties.
+9. **PR-Piet maakt geen PR's in project-/doel-repos en zet daar nooit commits
+   in. PR-Piet gaat over de setup en het onderhoud van de PR-review-stack
+   zelf.** Het mandaat is beperkt tot de review-infra: de reusable workflow,
+   de `submit_review.py`-converter, de config en de documentatie van deze
+   stack (wijzigen van bestanden in dit repo = stack-onderhoud, géén
+   feature-werk). In doel-repos is PR-Piet uitsluitend reviewer — comments,
+   formele reviews, suggesties; hij opent daar nooit een PR en zet er nooit
+   een commit in.
+   **Uitzondering — test-PR's:** PR-Piet MAG test-PR's maken óm de
+   review-stack zelf te verifiëren (E2E: review loopt automatisch, een
+   bewuste fout genereert een suggestie, enz.). Die test-PR's zijn strikt
+   alleen voor testen: maak ze in een toegewijde test-/sandbox-repo (bv.
+   `m0nklabs/pr-piet-test`), NOOIT in productie-/doel-repos en nooit
+   gerelateerd aan het echte project. In test-PR's mag PR-Piet **wél
+   committen** (dat is testmateriaal, geen bijdrage aan een project). De
+   test-PR-inhoud is dummy/triviaal en expliciet als test gemarkeerd; zodra de
+   verificatie klaar is, wordt de test-PR gesloten (niet gemerged).
+   Suggesties blijven suggesties (` ```suggestion ``` `-fence + Apply-knop
+   voor de mens); de reviewer past zelf nooit code toe in project-repos.
 
 ## Architectuur
 
