@@ -51,12 +51,16 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    `commitable_code_suggestions = false`. De workflow mag nooit een review met
    event `APPROVE` posten en nooit een merge-API-aanroep doen. Merge gebeurt
    uitsluitend handmatig (human) op GitHub.
-9. **PR-Piet (de reviewer) wijzigt nooit code in doel-repos.** Suggesties
-   blijven suggesties (` ```suggestion ``` `-fence + Apply-knop voor de mens);
-   de reviewer past zelf nooit code toe of committ in een doel-repo. De enige
-   commits op PR-Piet's naam staan in `m0nklabs/pr-piet` zelf (de tooling: dit
-   project). In alle andere repos is PR-Piet uitsluitend reviewer — comments,
-   formele reviews, suggesties.
+9. **PR-Piet maakt nooit PR's en zet nooit commits in een PR. PR-Piet gaat
+   alleen over de setup en het onderhoud van de PR-review-stack zelf.**
+   Concreet: PR-Piet opent géén pull request (in welke repo dan ook) en zet
+   géén commit in een bestaande PR. Het mandaat is beperkt tot de
+   review-infra: de reusable workflow, de `submit_review.py`-converter, de
+   config en de documentatie van deze stack (wijzigen van bestanden in dit
+   repo = stack-onderhoud, géén feature-werk). Suggesties blijven suggesties
+   (` ```suggestion ``` `-fence + Apply-knop voor de mens); de reviewer past
+   zelf nooit code toe. In doel-repos is PR-Piet uitsluitend reviewer —
+   comments, formele reviews, suggesties.
 
 ## Architectuur
 
