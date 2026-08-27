@@ -243,6 +243,15 @@ jobs:
           # (onze pr-agent-fork-patch; default false = exact upstream-gedrag).
           # submit_review.py wikkelt die in ```suggestion```-fences (Apply-knop).
           pr_reviewer.require_suggested_fix: ${{ inputs.single_call_review }}
+          # Re-review bij nieuwe pushes op een open PR (synchronize-event).
+          # Zonder deze settings skipt pr-agent synchronize (staat niet in
+          # pr_actions) → geen modelcall, en de submit-post valt terug op een
+          # fallback-body van de vorige review (stale inhoud op nieuwe head).
+          # Nu draait een push dus een verse review (+ improve in 2-call modus;
+          # in single-call-modus alleen /review, want de suggesties zitten daar
+          # al in).
+          github_action_config.handle_push_trigger: "true"
+          github_action_config.push_commands: ${{ inputs.single_call_review && '["/review"]' || '["/review", "/improve"]' }}
           # Schrijf de gestructureerde review-JSON naar de step-output, zodat
           # wij die kunnen omzetten naar een formele GitHub review (Copilot-look).
           github_action_config.enable_output: "true"
@@ -348,3 +357,7 @@ jobs:
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
           github_action_config.auto_improve: "false"
+          # Ook tier 2 re-reviewt bij nieuwe pushes (zie tier 1-toelichting);
+          # zonder push_trigger skipt de action synchronize volledig.
+          github_action_config.handle_push_trigger: "true"
+          github_action_config.push_commands: '["/review"]'

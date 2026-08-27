@@ -187,6 +187,15 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   'Dockerfile.github_action'` (from-source, `ADD pr_agent pr_agent`). Diagnose-tip:
   grep de job-log op `class KeyIssuesComponentLink` — als `suggested_fix` ontbreekt in
   de gerenderde prompt, draait er upstream-code in de container.
+- **Synchronize-events (push op open PR) zijn géén auto-actions.** pr-agent's
+  `pr_actions` = `[opened, reopened, ready_for_review, review_requested]`; een
+  `synchronize`-event zonder meer wordt geskipt met "Skipping action: synchronize"
+  (geen modelcall), waarna de submit-step een **fallback-body van de vorige review
+  herpost op de nieuwe head** (stale inhoud, misleidend). Fix in de workflow (beide
+  tiers): `github_action_config.handle_push_trigger: "true"` +
+  `github_action_config.push_commands` (tier 1: `["/review"]` in single-call, anders
+  `["/review", "/improve"]`; tier 2: `["/review"]`). Push-door-Bot en merge-commits
+  worden door pr-agent zelf genegeerd (default `ignore_*`-settings).
 - **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
   gemerged is op het moment dat de run start, is een review nutteloos
   (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`
