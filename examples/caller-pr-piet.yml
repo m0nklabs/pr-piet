@@ -38,6 +38,11 @@ jobs:
       enable_tier2: true
       auto_describe: true
       auto_improve: true
+      # EXPERIMENTEEL — 1 modelcall i.p.v. 2 voor review + suggesties
+      # (via de pr-agent fork; suggesties worden inline ```suggestion-fences
+      # mét Apply-knop op de formele review). Terugdraaien: regel weghalen
+      # of op false zetten = oude 2-call gedrag. Default is false.
+      # single_call_review: true
       response_language: en-US
       # gateway_base_url: http://172.17.0.1:11434/v1  (default; container -> host-bridge -> nginx)
     secrets:
