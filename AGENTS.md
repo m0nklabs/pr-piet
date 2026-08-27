@@ -242,10 +242,11 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   geverifieerd (chat-call via gateway werkt).
 - ✅ Phase 3 (Org-wide): repo publiek, org-secret `GUARDIAN_API_KEY`, e2e
   bewezen op test-PR's #10 (findings → tier 2 skip) en #11 (schoon →
-  tier 2 draaide). Caller geïnstalleerd in **alle m0nklabs-repos**
-  (m.u.v. pr-piet zelf en leeg caretaker-llama-cpp) + publieke non-fork
-  m0nk111-repos (agent-forge, agent-forge-test, CouncilOfDicks,
-  template-helper). m0nk111-repos draaien pas met eigen runners +
-  repo-secret `GUARDIAN_API_KEY`.
+  tier 2 draaide). Caller geïnstalleerd in **alle m0nklabs-repos én alle
+  m0nk111-repos** (49/49, 2026-08-27), allemaal met
+  `single_call_review: true` (1 modelcall). m0nklabs-repos draaien direct
+  (org-runners online + org-secret visibility=all). m0nk111-repos hebben de
+  caller klaarstaan maar draaien pas met eigen (repo-level) runners +
+  repo-secret `GUARDIAN_API_KEY` — zonder runner blijft de job queued.
 - ⏳ Open: auto-trigger bij echte PR-opened in een productie-repo,
   latency-benchmark deepseek vs glm, GitHub App-variant voor fork-PRs.
