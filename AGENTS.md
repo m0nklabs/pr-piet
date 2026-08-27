@@ -176,6 +176,17 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   fork. **Terugdraaien (2 stappen, onafhankelijk):** (1) zet `single_call_review` weer
   op `false` (caller-input) → 2-call gedrag; (2) wil je helemaal van de fork af: zet
   `uses:` in de workflow terug naar `the-pr-agent/pr-agent@main`. Default blijft `false`.
+- **VALKUIL pr-agent-fork: upstream action.yaml bouwt NIET from source.** De upstream
+  `action.yaml` verwijst naar `Dockerfile.github_action_dockerhub`, en dat bestand is
+  alleen `FROM pragent/pr-agent:github_action` — een **prebuilt upstream-image van
+  Docker Hub**. Broncode-wijzigingen in een fork komen dan NOOIT in de container: de
+  env-var (bv. `pr_reviewer.require_suggested_fix`) landt wél in dynaconf-settings
+  (zichtbaar in de "Relevant configs"-debug-dump), maar het draaiende pr_agent-pakket
+  en de prompts zijn upstream — het veld staat niet in de gerenderde prompt en het
+  model ziet het nooit. Onze fork zet daarom `action.yaml → image:
+  'Dockerfile.github_action'` (from-source, `ADD pr_agent pr_agent`). Diagnose-tip:
+  grep de job-log op `class KeyIssuesComponentLink` — als `suggested_fix` ontbreekt in
+  de gerenderde prompt, draait er upstream-code in de container.
 - **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
   gemerged is op het moment dat de run start, is een review nutteloos
   (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`
