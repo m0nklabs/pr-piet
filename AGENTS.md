@@ -176,6 +176,19 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   fork. **Terugdraaien (2 stappen, onafhankelijk):** (1) zet `single_call_review` weer
   op `false` (caller-input) → 2-call gedrag; (2) wil je helemaal van de fork af: zet
   `uses:` in de workflow terug naar `the-pr-agent/pr-agent@main`. Default blijft `false`.
+- **Copilot-stijl: onzekere bevinding → wél een best-effort `suggested_fix` (fork
+  `1181155`/`3682dc6`, 2026-08-28).** Aanleiding: PR #8 (guardian-llmprovider-gateway)
+  leverde een key-issue met een **lege** `suggested_fix` (géén Apply-knop) omdat de
+  prompt het model toestond "empty string" te gebruiken bij onzekerheid. De fork-prompt
+  is nu zo bijgesteld dat het model ALTIJD een concrete best-effort fix geeft, óók voor
+  een mogelijke/onzekere bevinding, én de bevinding markeert met `UNCERTAIN:`/`not
+  verified` in `issue_content` (Copilot-gedrag). E2E-bewezen op `m0nklabs/pr-piet-test`:
+  een bevinding krijgt nu wél een gevulde `suggested_fix` → inline ` ```suggestion ``` `-fence
+  mét Apply-knop. **Bekende beperking (geverifieerd):** deepseek-v4-flash-0731 zet de
+  `UNCERTAIN:`-markering niet consequent in de output — de twijfel staat intern in de
+  reasoning, maar drukt zelden door naar `issue_content`. De best-effort-fix-kant werkt;
+  de onzekerheids-vlag niet betrouwbaar (herschrijf niet: dit is modelgedrag, geen
+  fork-prompt-bug).
 - **VALKUIL pr-agent-fork: upstream action.yaml bouwt NIET from source.** De upstream
   `action.yaml` verwijst naar `Dockerfile.github_action_dockerhub`, en dat bestand is
   alleen `FROM pragent/pr-agent:github_action` — een **prebuilt upstream-image van
