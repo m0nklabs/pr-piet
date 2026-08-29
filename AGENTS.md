@@ -209,6 +209,19 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `github_action_config.push_commands` (tier 1: `["/review"]` in single-call, anders
   `["/review", "/improve"]`; tier 2: `["/review"]`). Push-door-Bot en merge-commits
   worden door pr-agent zelf genegeerd (default `ignore_*`-settings).
+- **FAAL-SAFE tegen "oude reviews herhalen" (2026-08-29, caretaker PR #5).** Als
+  de model-call niets oplevert (pr-agent logt bv. `Empty content in model response
+  (finish_reason: length)` en post geen verse review-comment), dan is er géén verse
+  review-JSON én géén verse (>= since) review-guide-comment én wél een oudere
+  review. `submit_review.py` herpost die stale body dan NIET als verse review op de
+  nieuwe head (dat was "oude reviews herhalen": de herhaalde reviews op caretaker
+  PR #5 waren byte-identiek aan de vorige zodat de "verbeterde code" ontbrak).
+  In plaats daarvan `return 3` → de workflow wordt ROOD (harde regel 2: model-fout
+  = rode workflow, geen stille degradatie). Implementatie: `had_fresh_body` /
+  `had_stale_comment` flags; de stale-fallback-body wordt alleen gebruikt als er
+  WÉL een verse review-JSON is (dan is de JSON de bron van de inline-comments en
+  is zo'n fallback zinnig). Overige exit-codes (1/2: GitHub API-fout op inline
+  comments) blijven niet-fataal zoals voorheen.
 - **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
   gemerged is op het moment dat de run start, is een review nutteloos
   (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`
