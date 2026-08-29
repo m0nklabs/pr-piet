@@ -398,6 +398,8 @@ def main() -> int:
     # 1. Review-data: JSON of issue-comment (fallback)
     review_data: dict | None = None
     body = ""
+    had_fresh_body = False
+    had_stale_comment = False
     if args.review_json:
         try:
             review_data = load_review_json(args.review_json)
@@ -416,10 +418,13 @@ def main() -> int:
             def _pick(cands, key) -> str:
                 return max(cands, key=key).get("body") or ""
 
-            # Eerst de recente comment (>=since). Levert dat niets op (bv. de
-            # review-JSON miste en pr-agent update een OUDERE comment), val dan
-            # terug op de meest recente review-guide-comment óverall zónder
-            # since-filter — de samenvatting blijft dan altijd posten.
+            # Eerst de recente comment (>=since) — dit is de "verse" body van
+            # deze run. Is er GEEN verse comment (pr-agent postte deze run geen
+            # review, bv. lege model-output) en ook geen verse review-JSON, dan
+            # is er niets nieuws te posten: we gebruiken de stale comment alleen
+            # als er WEL een verse review-JSON is (samenvatting erbij; de echte
+            # inhoud komt uit de JSON). "Oude reviews herhalen" (stale body op
+            # nieuwe head zonder verse analyse) wordt zo voorkomen — zie 1b.
             recent = [
                 c for c in comments_
                 if (not args.since or c.get("updated_at", "") >= args.since)
@@ -427,17 +432,28 @@ def main() -> int:
             ]
             if recent:
                 body = _pick(recent, lambda c: c.get("updated_at", ""))
+                had_fresh_body = True
             else:
+                # GEEN verse review-comment ná since. Dit betekent dat pr-agent
+                # deze run GEEN review gepost heeft (bv. lege model-output:
+                # "Empty content ... finish_reason: length"). Een stale body van
+                # een ÓUDE review op een NIEUWE head posten = "oude reviews
+                # herhalen" (misleidend: de verbeterde code staat er niet in).
+                # Alleen als we WEL een verse review-JSON hebben heeft zo'n
+                # fallback zin (samenvatting erbij, comments uit de JSON). Zonder
+                # verse JSON posten we dus NIET (zie 1b. hieronder).
                 any_c = [
                     c for c in comments_ if args.heading in c.get("body", "")
                 ]
                 if any_c:
-                    body = _pick(any_c, lambda c: c.get("updated_at", ""))
-                    print(
-                        f"(geen review-guide-comment ná since; fallback naar de "
-                        f"meest recente ({any_c[0].get('updated_at','?')}))",
-                        file=sys.stderr,
-                    )
+                    had_stale_comment = True
+                    if review_data:
+                        body = _pick(any_c, lambda c: c.get("updated_at", ""))
+                        print(
+                            f"(geen review-guide-comment ná since; fallback naar de "
+                            f"meest recente ({any_c[0].get('updated_at','?')}))",
+                            file=sys.stderr,
+                        )
         except Exception as exc:  # noqa: BLE001
             print(f"kon review-body niet ophalen: {exc}", file=sys.stderr)
 
@@ -482,6 +498,29 @@ def main() -> int:
                     )
         except Exception as exc:  # noqa: BLE001
             print(f"kon /improve-comment niet ophalen: {exc}", file=sys.stderr)
+
+    # 1b. FAAL-SAFE: géén verse analyse deze run, maar er WÉL een stale review
+    # bestaat. Dat is het model-falasignaal (bv. lege output: "Empty content ...
+    # finish_reason: length"): pr-agent postte deze run geen verse review en er
+    # is ook geen verse review-JSON. Een stale body van een oude review als
+    # "verse" review op een nieuwe head posten = "oude reviews herhalen"
+    # (misleidend). Per harde regel 2 (model-/gateway-fout = rode workflow, geen
+    # stille degradatie) faalt de job in dat geval. Zonder enige (zelfs stale)
+    # review-comment is er niets mis — dat behandelt de return-0 hieronder.
+    if (
+        not args.no_body
+        and not review_data
+        and not had_fresh_body
+        and had_stale_comment
+    ):
+        print(
+            "GEEN verse review deze run: geen review-JSON én geen verse "
+            "review-guide-comment ná --since (model-output leeg/afgekapt?), "
+            "maar er is wél een oudere review. Stale fallback NIET gepost — "
+            "job faalt (rode workflow).",
+            file=sys.stderr,
+        )
+        return 3
 
     if not review_data and not body:
         print("(geen review geplaatst: geen review-JSON én geen review-comment gevonden)")

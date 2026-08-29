@@ -283,12 +283,22 @@ jobs:
             --heading "PR Reviewer Guide" \
             --since "${{ steps.ts.outputs.since }}" \
             ${json_arg} \
-            > /tmp/submit_review.out 2> /tmp/submit_review.err || true
+            > /tmp/submit_review.out 2> /tmp/submit_review.err
+          rc=$?
           cat /tmp/submit_review.out
           if [ -s /tmp/submit_review.err ]; then
             echo "--- stderr ---"
             cat /tmp/submit_review.err
           fi
+          # Harde regel 2: een model-/gateway-fout (geen verse review-JSON en
+          # geen verse review-comment => lege/afgekapte model-output) moet een
+          # RODE workflow zijn, géén stille malicious fallback van een verouderde
+          # review (submit_review.py return 3). Anders: rode run, script gelukt.
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::PR-Piet: geen verse review (lege model-output); zie stderr"
+            exit 1
+          fi
+          exit "$rc"
 
       - name: Detecteer tier-1 resultaat (clean of findings)
         id: detect
