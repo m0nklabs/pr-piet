@@ -182,3 +182,17 @@
   → non-streaming acompletion voor openai/-modellen; de body-loze
   capture-records kwamen dus inderdaad door de non-stream extractor
   (capture_dispatch.py) — consistent met de G1-root-cause.
+
+- **Incident 2026-08-30 20:18-20:27 (caretaker PR #8): rode runs op gewone
+  comments.** Oorzaak: élke issue-comment triggert PR-Piet; m0nk111 postte
+  status-comments ("Slot — review-cyclus afgesloten", met `**Head:**`
+  -markdown) en pr-agent parseerde daar "**head:" als commando
+  ("Unknown command") → geen modelcall → submit exit 3 → rood. NIET het
+  nieuwe model: de 20:56-`/review`-run op dezelfde PR slaagde normaliter.
+  Fix: commando-guard in map + review_tier1 — alleen comments met een
+  commando op een eigen regel (`/review`, `/improve`, ...) doorlopen;
+  andere comments skippend (geen rode run; harde regel 2 blijft intact,
+  de guard draait vóór er een modelcall is). Getest tegen de exacte
+  comment-bodies van vandaag (10/10 lokalen) + live sandbox-verificatie.
+  Voorwaarde aan gebruikers: commando op een eigen regel; commando mid-regel
+  wordt bewust genegeerd.

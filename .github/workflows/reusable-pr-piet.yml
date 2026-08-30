@@ -6,7 +6,7 @@
 # Jobs:
 #   1. map          — géén secrets: checkout PR-head, tree-sitter repo-map
 #                     (scripts/repo_mapper.py) -> .pr_piet/context.md artifact
-#   2. review_tier1 — deepseek-v4-flash-0731 review mét repo-context
+#   2. review_tier1 — glm-5.3-flash review mét repo-context
 #                     (artifact_path injectie). GEEN fallback: fout = rode run.
 #   3. review_tier2 — OPTIONEEL: z-ai/glm-5.2 second opinion, alleen als
 #                     tier 1 "No major issues detected" meldt.
@@ -107,7 +107,29 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Commando-guard (issue_comment)
+        id: cmdguard
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # Elke issue-comment op een PR triggert deze workflow, maar alleen
+          # comments met een pr-agent-commando (een regel die begint met
+          # /commando) zijn een review-verzoek. Status-updates van andere
+          # agents of discussies skippen de hele run — GÉEN rode run, want
+          # harde regel 2 geldt alleen voor échte model-/gateway-fouten.
+          proceed=true
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            if ! printf '%s' "$COMMENT_BODY" | grep -qiE \
+              '^[[:space:]]*/(review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
+              proceed=false
+              echo "::notice::Comment bevat geen pr-agent-commando — PR-Piet overgeslagen (zet het commando op een eigen regel, bv. '/review')"
+            fi
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+
       - name: Checkout PR head
+        if: steps.cmdguard.outputs.proceed == 'true'
         uses: actions/checkout@v4
         with:
           # refs/pull/N/head werkt voor pull_request én issue_comment events.
@@ -115,18 +137,21 @@ jobs:
           fetch-depth: 0
 
       - name: Clone pr-piet (scripts + config)
+        if: steps.cmdguard.outputs.proceed == 'true'
         run: |
           rm -rf pr-piet
           git clone --depth 1 --branch "${{ inputs.pr_piet_ref }}" \
             "https://github.com/${{ inputs.pr_piet_repo }}.git" pr-piet
 
       - name: Python + tree-sitter
+        if: steps.cmdguard.outputs.proceed == 'true'
         run: |
           python3 -m venv pr-piet/.venv
           pr-piet/.venv/bin/pip install --quiet --upgrade pip
           pr-piet/.venv/bin/pip install --quiet -r pr-piet/requirements.txt
 
       - name: Bouw repo-map
+        if: steps.cmdguard.outputs.proceed == 'true'
         env:
           BASE_REF: ${{ inputs.base_branch || github.event.repository.default_branch }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
@@ -145,6 +170,7 @@ jobs:
             --json
 
       - name: Upload context artifact
+        if: steps.cmdguard.outputs.proceed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: pr-piet-context
@@ -172,8 +198,33 @@ jobs:
     outputs:
       tier1_clean: ${{ steps.detect.outputs.tier1_clean }}
     steps:
+      - name: Commando-guard (issue_comment)
+        id: cmdguard
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # Zelfde guard als in de map-job: een comment zonder pr-agent-
+          # commando (regel begint niet met /commando) is geen review-verzoek.
+          # Zonder deze guard gaat pr-agent de comment verkeerd parsen
+          # ("Unknown command: **head:" op caretaker PR #8, 2026-08-30) en
+          # draait de submit-step op exit 3: een rode run op een gewone
+          # status-comment. Skippend is netter; harde regel 2 (rood bij een
+          # model-/gateway-fout) blijft onaangetast — de guard draait vóór
+          # er een modelcall is.
+          proceed=true
+          if [ "$EVENT_NAME" = "issue_comment" ]; then
+            if ! printf '%s' "$COMMENT_BODY" | grep -qiE \
+              '^[[:space:]]*/(review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
+              proceed=false
+              echo "::notice::Comment bevat geen pr-agent-commando — review overgeslagen (zet het commando op een eigen regel, bv. '/review')"
+            fi
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+
       - name: Skip als PR al gesloten/gemerged is
         id: pr-state
+        if: steps.cmdguard.outputs.proceed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -190,33 +241,33 @@ jobs:
             echo "closed=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Start-tijdstip (voor tier-2 detectie van de verse comment)
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         id: ts
         run: echo "since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Clone pr-piet (scripts + config)
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         run: |
           rm -rf pr-piet
           git clone --depth 1 --branch "${{ inputs.pr_piet_ref }}" \
             "https://github.com/${{ inputs.pr_piet_repo }}.git" pr-piet
 
       - name: Download repo-context
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         uses: actions/download-artifact@v4
         with:
           name: pr-piet-context
           path: .pr_piet/
 
       - name: Koppel PR-Piet config
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         run: |
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
           ls -la .pr_piet/
 
       - name: PR Agent (tier 1)
         id: pr-agent
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
 
         # FORK: m0nklabs/pr-agent = upstream The-PR-Agent/pr-agent + onze
         # suggested_fix-patch (zie PR-PIET-PATCH.md in die repo). Terugdraaien
@@ -276,7 +327,7 @@ jobs:
 
       - name: Submit formele GitHub review (Copilot-stijl)
         id: submit
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -319,7 +370,7 @@ jobs:
 
       - name: Detecteer tier-1 resultaat (clean of findings)
         id: detect
-        if: steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
