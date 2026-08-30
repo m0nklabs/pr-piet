@@ -288,6 +288,13 @@ jobs:
           config.model: ${{ inputs.model_tier1 }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
+          # Harde output-begrenzing (fork-knop, ONLY tier-1): pr-agent stuurt
+          # zelf geen max_tokens → provider-default gold (131072, runaway
+          # 23:16:02Z: 1725 s, 131k out, null content op een 65k-input PR).
+          # 49152 = 1,6× de zwaarste geslaagde call (30,5k out) en ≈650 s bij
+          # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
+          # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
+          config.max_output_tokens: "49152"
           config.max_model_tokens: "64000"
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
