@@ -142,3 +142,13 @@
   geen disconnect-logregel → ofwel is_disconnected() vuret niet voor
   non-streamed requests in de docker→nginx-keten, ofwel brak de client nooit
   af. Repro-plan in het bugreport-JSON.
+
+- **Naleving (E2E-detail):** beide kandidaat-modellen negeerden de
+  [verified-bug]/[hypothetical]-classificatie-instructie uit
+  extra_instructions (bevindingen kwamen ongetagd binnen; de conservatieve
+  verdict-default greep in). Prompt-naleving is dus geen modelgarantie — het
+  graderings-beleid (verdict_from_review) is de echte rem.
+- **Provider-routing is variabel:** glm-5.2 kwam in de E2E via Novita, in
+  productie via Baidu; glm-5.3-flash consistent via Z.AI. Vergelijkingen
+  tussen modellen zijn dus óók provider-serving-vergelijkingen (denk- aan
+  per-provider caps en reasoning-param-ondersteuning).
