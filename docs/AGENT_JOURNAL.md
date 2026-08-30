@@ -161,3 +161,24 @@
   betaalt 2,8-5× meer reasoning ervoor — en levert als enige valide
   review-YAML (glm-5.2 0/2 formele reviews). Nugebruik voor de capture:
   het veld zit in de response-usage en kan gespiegeld worden (C5).
+
+- **`config.custom_model_max_tokens` is load-bearing (subagent C-detail):**
+  `get_max_tokens()` (algo/utils.py:1147-1170) kent de exacte modelnaam
+  `openai/deepseek/deepseek-v4-flash-0731` (en evenmin
+  `openai/z-ai/glm-5.3-flash`) niet in MAX_TOKENS → zonder de env
+  `custom_model_max_tokens` CRASHT de review op utils.py:1165
+  (Exception). De env-waarde zelf doet alleen input-clipping
+  (min met max_model_tokens=64000); nooit verwijderen bij een modelwissel.
+- **"Empty content"-faalmode eindigt ROOD (code-bevestiging):**
+  litellm_ai_handler.py:970-979 raise APIError bij lege content met
+  onderscheidende warning (finish_reason erin) → @retry
+  MODEL_RETRIES=2 = precies 1 retry (regel 561-565) → reraise →
+  submit_review.py exit 3 → rode workflow. De fail-safe is dus ook voor de
+  nieuwe tier-1-code gesloten; let op de asymmetrie: in het STREAMING-pad
+  zou hetzelfde geval alleen op DEBUG loggen (litellm_helpers.py:76-78) —
+  niet onze route.
+- **Onze route is non-streaming (bevestigt G1-pad):**
+  STREAMING_REQUIRED_MODELS=["openai/qwq-plus"] + force_streaming default ""
+  → non-streaming acompletion voor openai/-modellen; de body-loze
+  capture-records kwamen dus inderdaad door de non-stream extractor
+  (capture_dispatch.py) — consistent met de G1-root-cause.
