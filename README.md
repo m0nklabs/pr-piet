@@ -116,6 +116,43 @@ python3 -m venv .venv
   `.pr_agent.toml` in het doel-repo kan hem overriden, workflow-env wint
   altijd.
 
+## Fork-PRs en secrets
+
+De standaard caller triggert op `pull_request`. PR's van forks van buiten de
+organisatie krijgen daarvoor standaard **geen secrets en een read-only
+GITHUB_TOKEN**: de review-pipeline (die de gateway-key nodig heeft) kan daar
+niet op draaien. Dat is bewust — secrets komen nooit in de buurt van
+untrusted workflow-uitvoering.
+
+**Status (2026-08-30):** er zijn géén externe fork-PR's in de m0nklabs-repos
+(0 van 435 PR's in alle publieke repos; alle menselijke auteurs zijn
+org-members, bot-PR's worden geskipt door de caller-guard
+`sender.type != 'Bot'`). Bouw de fork-variant pas bij de eerste echte externe
+fork-PR (signaal: `head.repo.full_name != github.repository`, of een
+menselijke auteur met association `NONE`/`FIRST_TIME_CONTRIBUTOR`).
+
+**Aanpak als het zover is (getest ontwerp, nog niet gebouwd):**
+
+1. Caller: vervang `pull_request` door `pull_request_target` — de
+   workflow-file komt altijd uit de base-branch en de review-jobs checken
+   nooit PR-code uit (pr-agent is API-only): precies het veilige patroon uit
+   de GitHub Security Lab "pwn-request"-richtlijn.
+2. Map-job blijft secrets-vrij en checkout `refs/pull/N/head` zoals nu. Let
+   op: `actions/checkout` v7 weigert standaard fork-PR-checkouts in
+   `pull_request_target`-workflows — pin de map-job checkout op v4 of zet
+   bewust `allow-unsafe-pr-checkout: true` in die secrets-vrije job.
+3. Review-jobs minten per job een kortlopend token via
+   `actions/create-github-app-token@v3` (1 u, revoke in de post-step) met
+   fallback op `GITHUB_TOKEN`. Minimale App-permissies:
+   `pull_requests: write` (dek formele reviews én PR-comments) +
+   `contents: read`/`metadata: read`; `issues: write` als belt-and-braces
+   conform de pr-agent App-spec.
+4. GitHub App alleen als token-bron (webhooks uit), geïnstalleerd op de
+   organisatie; secrets `PR_PIET_APP_CLIENT_ID`/`PR_PIET_APP_PRIVATE_KEY`.
+5. E2E eerst op `m0nklabs/pr-piet-test`, pas daarna org-uitrol.
+   (`workflow_run` is géén alternatief: pr-agent skipt fork-PR's in die
+   handler.)
+
 ## Componenten
 
 | Pad | Functie |

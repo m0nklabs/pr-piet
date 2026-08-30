@@ -341,5 +341,34 @@ oude gedrag; de global identity van de host is `PR-Piet <pr-piet@m0nklabs.dev>`.
   (org-runners online + org-secret visibility=all). m0nk111-repos hebben de
   caller klaarstaan maar draaien pas met eigen (repo-level) runners +
   repo-secret `GUARDIAN_API_KEY` — zonder runner blijft de job queued.
-- ⏳ Open: auto-trigger bij echte PR-opened in een productie-repo,
-  latency-benchmark deepseek vs glm, GitHub App-variant voor fork-PRs.
+- ✅ Open punten afgerond (2026-08-30; bewijs + methodiek in
+  `docs/HANDOFF.md` / `docs/AGENT_JOURNAL.md`):
+  - **Auto-trigger in productie bewezen**: 13 productie-PR's (guardian
+    #8-#15, caretaker #1-#7) draaiden pr-piet automatisch; zuivere
+    opened-trigger hard bewezen op guardian #8 (bot-review 11m47s na
+    opened, zonder /review-command); tier 2 (glm-5.2) 3x success in
+    productie; map-job 12/12 waargenomen golven success, 0 failures.
+    Bekend risico: één GitHub-side event-delivery-misser (guardian #14,
+    hersteld via re-trigger).
+  - **Latency-benchmark deepseek vs glm** (identieke review-payload via de
+    gateway): glm-5.2 16,5s → complete review (1229 tok, stop);
+    deepseek-v4-flash-0731 74s+ zonder content (4000 tok puur reasoning,
+    finish_reason=length) — deepseek verbrandt hele token-budgets aan
+    reasoning, exact het bekende "Empty content (length)"-faalmode.
+    Let op: de gateway heeft een response-cache voor identieke payloads
+    (0,3s herhaal-respons met zero-usage; geen productie-impact).
+  - **GitHub App-variant voor fork-PRs: uitgesteld** tot de eerste echte
+    externe fork-PR (criterium: `head.repo.full_name != github.repository`
+    of menselijke auteur met association NONE/FIRST_TIME_CONTRIBUTOR).
+    0 fork-PR's in 435 gescalede PR's. Ontwerp + operator-checklist:
+    README-sectie "Fork-PRs en secrets".
+- **Mapper-truncatie-bug gefixt (a1633f8, 2026-08-30)**: de hard-truncate
+  van het token-budget kon een héle sectie weggooien wanneer de inkorting
+  1-12 tokens overschreed (gevonden op PR #12 guardian: de
+  symbolen-sectie van 31k tokens verdween, context kromp naar 200 tokens).
+  Fix: 12-token marker-reserve in de keep-loop — een ingekorte sectie past
+  gegarandeerd. Daarnaast: symbolen-sectie op **churn-volgorde** (de
+  kern van de PR overleeft truncatie, niet de alfabetisch-eerste
+  bestanden). Live voor alle callers (`pr_piet_ref` default = main).
+  Mapper getest op productie-PR's: guardian PR #12 (+2803/-283; full AST
+  path 2,0s) en caretaker PR #1 (complete 4-sectie map, 2710 tok, 0,33s).
