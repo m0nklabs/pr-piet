@@ -222,6 +222,37 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   WÉL een verse review-JSON is (dan is de JSON de bron van de inline-comments en
   is zo'n fallback zinnig). Overige exit-codes (1/2: GitHub API-fout op inline
   comments) blijven niet-fataal zoals voorheen.
+- **Review-proces-beleid (2026-08-30, advies naar aanleiding van
+  guardian-llmprovider-gateway PR #12: 34 bot-reviews / 100+ threads in 13 uur,
+  herhaaldelijk weerlegde bevindingen, merge-state UNSTABLE).** Vier veranderingen:
+  1. **Incrementele push-review**: `push_commands` = `["/review -i"]` (single-call)
+     — een push reviewt alleen de commits sinds de laatste gereviewde head.
+     Bewezen in de fork-code: `PRReviewer.parse_incremental` pakt `args[0]=="-i"`;
+     `_can_run_incremental_review` valt terug naar FULL review als er geen
+     review-marker is (`commits_range None → is_incremental=False`); de
+     threshold-defaults zijn 0/0 en blokkeren nooit; `-i` passeert
+     `CliArgs.validate_user_args` (die checkt alleen `--`-args). Full review
+     blijft: auto-review op opened + menselijke `/review`. Tier 2 blijft bewust
+     FULL (een second opinion moet de hele PR zien).
+  2. **Verdict-gradering** (`submit_review.py verdict_from_review`):
+     REQUEST_CHANGES alleen bij blokkerende bevindingen ([verified-bug] of
+     ongetagd — conservatief default, zodat prompt-niet-naleving nooit milder
+     is dan voorheen); alle [hypothetical]/[backlog]/"UNCERTAIN:"-content →
+     COMMENT. NOOIT APPROVE (harde regel 8) — "geen nieuwe bevindingen" is
+     altijd COMMENT.
+  3. **Prompt-classificatie + dedupe** (`config/.pr_agent.toml`
+     [pr_reviewer].extra_instructions): elke key-issue header begint met
+     [verified-bug]/[hypothetical]/[backlog]; herhaal geen bevinding die in een
+     bestaande thread al met bewijs is weerlegd; orden op impact. Bewezen: de
+     artifact (repo-map) wordt geAPPEND aan extra_instructions
+     (`github_action_runner.py`: `extra_instructions + separator +
+     artifact_text`), dus toml-instructies en artifact-context coëxisteren.
+  4. **Concurrency/timeout**: review-jobs 30→60 min (grote diffs liepen tegen
+     de 30-min-jobcap); caller-template splitst de concurrency-group per
+     event-name zodat een `/review`-comment de lopende pull_request-auto-review
+     niet meer cancelt (gecancelde run = gefaalde required check = UNSTABLE).
+     Bestaande callers (49 repos) kunnen dat overnemen bij hun volgende
+     caller-update — niet geforceerd.
 - **Closed/merged PR → review overgeslagen.** Als de PR al gesloten of
   gemerged is op het moment dat de run start, is een review nutteloos
   (modeltijd weggooien). `review_tier1` heeft daarom een vroege `pr-state`

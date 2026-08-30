@@ -249,6 +249,45 @@ def extract_key_issues(review_data: dict) -> list:
     return issues
 
 
+# ---------------------------------------------------------------------------
+# Verdict-gradering (advies guardian-llmprovider-gateway PR #12, 2026-08-30):
+# REQUEST_CHANGES is voorbehouden aan geverifieerde blokkerende bevindingen.
+# Zijn álle bevindingen expliciet niet-geverifieerd ([hypothetical]/[backlog]
+# tag of "UNCERTAIN:"-inhoud), dan COMMENT — de merge-poort mag niet afhangen
+# van de kans dat de reviewer toevallig niets vindt. Harde regel 8: NOOIT
+# APPROVE; "geen nieuwe bevindingen" is altijd COMMENT.
+# Conservatief default: een bevinding ZONDER classificatie-tag telt als
+# blokkerend (oude gedrag), zodat niet-naleving van de prompt nooit milder
+# wordt dan voorheen.
+# ---------------------------------------------------------------------------
+_NONBLOCKING_TAG_RE = re.compile(r"\[(hypothetical|backlog)\]", re.IGNORECASE)
+
+
+def _issue_is_nonblocking(issue: dict) -> bool:
+    """True als de bevinding expliciet als niet-blokkerend is geclassificeerd."""
+    header = (issue.get("issue_header") or "")
+    content = (issue.get("issue_content") or "").strip()
+    if _NONBLOCKING_TAG_RE.search(header):
+        return True
+    # Fork-prompt-marker: bij lage confidence begint issue_content met
+    # "UNCERTAIN: ..." (Copilot-stijl: bevinding wél tonen, onzekerheid
+    # markeren).
+    return content[:120].lower().startswith("uncertain")
+
+
+def verdict_from_review(review_data: dict) -> tuple[str, int, int]:
+    """Bepaal (event, #blocking, #non-blocking) uit de review-JSON.
+
+    REQUEST_CHANGES zodra er minstens één blokkerende bevinding is
+    (verified-bug óf ongetagd — conservatief), anders COMMENT.
+    """
+    issues = [i for i in extract_key_issues(review_data) if isinstance(i, dict)]
+    nonblocking = sum(1 for i in issues if _issue_is_nonblocking(i))
+    blocking = len(issues) - nonblocking
+    event = "REQUEST_CHANGES" if blocking else "COMMENT"
+    return event, blocking, nonblocking
+
+
 def build_inline_comments(review_data: dict) -> list:
     """Vertaal key-issues naar comments[] voor de reviews API.
 
@@ -562,8 +601,20 @@ def main() -> int:
     # 3. Event bepalen
     event = args.event
     if event == "auto":
-        if comments:
-            event = "REQUEST_CHANGES"
+        if review_data is not None:
+            # Verdict-gradering uit de review-JSON (zie verdict_from_review):
+            # REQUEST_CHANGES alleen bij blokkerende bevindingen (verified-bug
+            # of ongetagd); alle hypothetical/backlog/UNCERTAIN -> COMMENT.
+            event, n_block, n_nonblock = verdict_from_review(review_data)
+            print(
+                f"(verdict: {event} — {n_block} blocking, {n_nonblock} "
+                f"hypothetical/backlog/UNCERTAIN)",
+                file=sys.stderr,
+            )
+        elif comments:
+            # 2-call-modus suggesties zonder review-JSON: suggesties zijn geen
+            # geverifieerde bugs -> COMMENT (was REQUEST_CHANGES).
+            event = "COMMENT"
         elif review_data is None and body:
             # Fallback-route (geen JSON): leid het event af uit de body.
             event = (

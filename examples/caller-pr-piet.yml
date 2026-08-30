@@ -22,9 +22,14 @@ permissions:
   issues: write
   pull-requests: write
 
-# Eén review tegelijk per PR: nieuwe run cancelt de lopende.
+# Eén review tegelijk per PR én event-type: nieuwe run cancelt de lopende
+# van het ZELFDE event-type. De groep is gesplitst op event-name zodat een
+# menselijke `/review`-comment de lopende pull_request-auto-review NIET
+# cancelt — een gecancelde run telt als gefaalde required check
+# (merge-state UNSTABLE, gezien op guardian-llmprovider-gateway PR #12).
+# Pushes op dezelfde PR debouncen nog wél onderling.
 concurrency:
-  group: pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:

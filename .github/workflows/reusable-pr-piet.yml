@@ -154,7 +154,10 @@ jobs:
     name: "Review tier 1 (${{ inputs.model_tier1 }})"
     needs: [map]
     runs-on: [self-hosted, Linux]
-    timeout-minutes: 30
+    # 60 min: grote PRs (bv. +2800 regels) kunnen de review-call dicht bij de
+    # ai_timeout (900s) brengen plus map-job/submit; 30 min was krap (advies
+    # PR #12: diepe reviews op grote diffs liepen tegen de 30-min-jobcap).
+    timeout-minutes: 60
     permissions:
       contents: read
       issues: write
@@ -247,11 +250,15 @@ jobs:
           # Zonder deze settings skipt pr-agent synchronize (staat niet in
           # pr_actions) → geen modelcall, en de submit-post valt terug op een
           # fallback-body van de vorige review (stale inhoud op nieuwe head).
-          # Nu draait een push dus een verse review (+ improve in 2-call modus;
-          # in single-call-modus alleen /review, want de suggesties zitten daar
-          # al in).
+          #
+          # INCREMENTEEL (advies guardian-llmprovider-gateway PR #12: 34 full
+          # reviews in 13 uur): een push reviewt alleen de commits sinds de
+          # laatste gereviewde head (`-i`-vlag). De gate in de fork
+          # (`_can_run_incremental_review`) valt netjes terug op een FULL
+          # review als er nog geen review-marker op de PR is. Full review
+          # blijft verder: de auto-review op opened en een menselijke /review.
           github_action_config.handle_push_trigger: "true"
-          github_action_config.push_commands: ${{ inputs.single_call_review && '["/review"]' || '["/review", "/improve"]' }}
+          github_action_config.push_commands: ${{ inputs.single_call_review && '["/review -i"]' || '["/review -i", "/improve"]' }}
           # Schrijf de gestructureerde review-JSON naar de step-output, zodat
           # wij die kunnen omzetten naar een formele GitHub review (Copilot-look).
           github_action_config.enable_output: "true"
@@ -325,7 +332,7 @@ jobs:
     needs: [review_tier1]
     if: ${{ inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' }}
     runs-on: [self-hosted, Linux]
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       issues: write
