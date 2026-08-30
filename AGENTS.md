@@ -239,7 +239,14 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
      ongetagd — conservatief default, zodat prompt-niet-naleving nooit milder
      is dan voorheen); alle [hypothetical]/[backlog]/"UNCERTAIN:"-content →
      COMMENT. NOOIT APPROVE (harde regel 8) — "geen nieuwe bevindingen" is
-     altijd COMMENT.
+     altijd COMMENT. E2E 2026-08-30 (pr-piet-test PR #7): deepseek gaf in
+     ronde 1 een ongetagde bevinding (`Possible Bug`) — gradering greep
+     correct in via de conservatieve default (CHANGES_REQUESTED); ronde 2
+     leverde een echte incrementele review (`## Incremental PR Reviewer
+     Guide`, identity `<!-- pr-agent:review:incremental -->`) met verse
+     analyse op de nieuwe head. Let op: de incrementele body-header luidt
+     "Review for commits since previous PR-Agent review starting from
+     commit …", niet "Review updated until commit".
   3. **Prompt-classificatie + dedupe** (`config/.pr_agent.toml`
      [pr_reviewer].extra_instructions): elke key-issue header begint met
      [verified-bug]/[hypothetical]/[backlog]; herhaal geen bevinding die in een
