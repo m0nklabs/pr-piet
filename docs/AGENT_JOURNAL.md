@@ -152,3 +152,12 @@
   productie via Baidu; glm-5.3-flash consistent via Z.AI. Vergelijkingen
   tussen modellen zijn dus óók provider-serving-vergelijkingen (denk- aan
   per-provider caps en reasoning-param-ondersteuning).
+
+- **Exacte token-splitsing (addendum, vervangt char-schatting):** de fork-logs
+  bevatten `completion_tokens_details.reasoning_tokens` — de splitsing is nu
+  exact, geen schatting. glm-5.3-flash review-call: 3852 out = 3129 reasoning
+  (81,2%) + 723 content; glm-5.2: 1241/1681 out = 581/1059 reasoning (47-63%)
+  + 660/622 content. Content-volume gelijk (~620-723 tok); glm-5.3-flash
+  betaalt 2,8-5× meer reasoning ervoor — en levert als enige valide
+  review-YAML (glm-5.2 0/2 formele reviews). Nugebruik voor de capture:
+  het veld zit in de response-usage en kan gespiegeld worden (C5).
