@@ -38,7 +38,11 @@ from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 DEFAULT_OUTPUT = ".pr_piet/context.md"
 DEFAULT_MAX_TOKENS = 4096  # max_context_tokens uit de spec
 DEFAULT_AST_DEPTH = 3
-DEFAULT_MAX_DIFF_BYTES = 102400  # max_diff_bytes uit de spec
+# Was 102400 (uit de oorspronkelijke spec); verhoogd naar 512 KB na de
+# productie-test op guardian-llmprovider-gateway PR #12 (+2803/-283, 214 KB):
+# het volledige tree-sitter-pad duurde daar 2,0 s en de token-budget-truncatie
+# is bewezen correct (fix a1633f8). De cap boundt alleen pathologische diffs.
+DEFAULT_MAX_DIFF_BYTES = 524288
 DEFAULT_LANGUAGES = ["python", "typescript", "go", "rust"]
 
 # drop_large_files_pattern uit de spec (gitignore-stijl, relatief aan repo-root)

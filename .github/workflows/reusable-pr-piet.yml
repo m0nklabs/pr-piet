@@ -85,6 +85,11 @@ on:
         required: false
         type: number
         default: 4096
+      max_diff_bytes:
+        description: "Max diff-grootte (bytes) die de mapper volledig parseert (tree-sitter); groter = diff-only summary. Sinds 2026-08-30 524288 (512 KB): full AST-path op een 214 KB productie-PR duurde 2,0 s en de token-truncatie is bewezen correct."
+        required: false
+        type: number
+        default: 524288
     secrets:
       GUARDIAN_API_KEY:
         description: "Gateway API key voor pr-piet (org-secret)."
@@ -126,6 +131,7 @@ jobs:
           BASE_REF: ${{ inputs.base_branch || github.event.repository.default_branch }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           MAX_TOKENS: ${{ inputs.max_context_tokens }}
+          MAX_DIFF_BYTES: ${{ inputs.max_diff_bytes }}
         run: |
           head_sha="${HEAD_SHA:-$(git rev-parse HEAD)}"
           echo "base=origin/${BASE_REF} head=${head_sha}"
@@ -135,6 +141,7 @@ jobs:
             --head "${head_sha}" \
             --output .pr_piet/context.md \
             --max-tokens "${MAX_TOKENS}" \
+            --max-diff-bytes "${MAX_DIFF_BYTES}" \
             --json
 
       - name: Upload context artifact
