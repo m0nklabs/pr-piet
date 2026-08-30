@@ -51,3 +51,19 @@
 - **pr_piet_ref defaults to `main`** in the reusable workflow inputs → mapper/config
   fixes pushed to main are live for all 49 callers on their next run, no caller update
   needed.
+
+## 2026-08-30 — diff-cap verhoging (512 KB)
+
+- **701 vs 703 symbolen**: lokaal telde ik 700 functies + 1 klasse = 701; de
+  mapper meldt 703 (docstring-niveau verschil in tellingsgrens, geen functie).
+  Wanneer je mapper-tellingen vergelijkt met bronanalyse, verwacht ±2.
+- **Draft → ready_for_review dubbel-trigger**: PR #8 vuurde twee runs af
+  (opened + ready_for_review 29 s later); de concurrency-group annuleerde de
+  eerste ná een al succesvolle map-job. Klassiek patroon: laat draft-PR's weg
+  als je alleen één run wilt, of accepteer de cancel.
+- **De review-bot vlagde de branch-pin zelf** ("Temporary Pin", CHANGES_REQUESTED):
+  het verdict-beleid werkt zoals ontworpen — mutable pins zijn een terechte
+  bevinding. Voor toekomstige caller-pins: verwacht die bevinding en sluit de
+  PR na verificatie.
+- **Mapper-aanroep in de map-job gebruikt `${MAX_DIFF_BYTES}` als string** in de
+  shell — workflow input type `number` stringified netjes; geen quotes-probleem.

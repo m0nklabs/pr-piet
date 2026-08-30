@@ -372,3 +372,10 @@ oude gedrag; de global identity van de host is `PR-Piet <pr-piet@m0nklabs.dev>`.
   bestanden). Live voor alle callers (`pr_piet_ref` default = main).
   Mapper getest op productie-PR's: guardian PR #12 (+2803/-283; full AST
   path 2,0s) en caretaker PR #1 (complete 4-sectie map, 2710 tok, 0,33s).
+- **`max_diff_bytes` verhoogd naar 512 KB + caller-input (2026-08-30)**: de
+  100 KB-spec-waarde liet zware productie-PRs vallen in de diff-only
+  fail-safe (guardian PR #12, 214 KB, kreeg in CI alleen een bestandslijst).
+  Nieuw: reusable-input `max_diff_bytes` (default 524288) → map-job geeft
+  die door als `--max-diff-bytes`; callers kunnen per repo afwijken.
+  E2E bewezen op pr-piet-test PR #8: 186 KB diff → `max 524288` in de
+  map-log, 703 symbolen, 4051/4096 tokens (2 onafhankelijke runs).

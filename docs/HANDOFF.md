@@ -109,3 +109,24 @@ now: the previously dangling README section "Fork-PRs en secrets" was written
   the ~31-min failure on #14 are direct evidence.
 - AGENTS.md Status section updated in the same batched pass (auto-trigger,
   benchmark, GitHub App assessment).
+
+## Session 2026-08-30 ( vervolg): max_diff_bytes 100 KB → 512 KB als caller-input
+
+**Veranderd (commits `6e09c19` + `a78dced`, gemerged naar main na E2E-bewijs):**
+- Nieuwe reusable-workflow-input `max_diff_bytes` (default **524288**) → map-job
+  geeft die door als `--max-diff-bytes`; callers kunnen per repo afwijken.
+- Mapper-default gelijkgetrokken (was 102400, de oorspronkelijke spec-waarde).
+- README: inputtabel + fail-safes-paragraaf bijgewerkt.
+
+**E2E-bewijs (pr-piet-test PR #8, winning run 33324268979, 2 onafhankelijke
+map-job runs):** diff van 186 106 bytes (bewust > oude cap) →
+`diff-grootte: 186106 bytes (max 524288)`, volledig tree-sitter-pad
+(703 symbolen + 703 calls, PageRank, symbols.json), context 4051/4096 tokens
+(diff-only summary zou ~157 zijn geweest). Tier 1 review draaide eroverheen
+(success, formele review CHANGES_REQUESTED — de bot vlagde de intentionele
+branch-pin terecht als "Temporary Pin": dogfooding-bewijs van het verdict-beleid).
+
+**Methodiek:** branch `mapper-diff-cap-512k` → test-PR #8 in de sandbox met
+caller-pin (`uses:` + `pr_piet_ref` op de branch) + 180 KB dummy-module
+(`sandbox/dummy_big_module.py`, lokaal pre-verifieerd) → subagent-verificatie
+van de CI-log → pas daarna fast-forward merge naar main.
