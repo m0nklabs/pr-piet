@@ -73,6 +73,7 @@ faalt de workflow bij de eerste PR.
 | `auto_describe` / `auto_improve` | `true` / `true` | Auto-tools bij PR-opened |
 | `response_language` | `en-US` | Taal van pr-agent output |
 | `max_context_tokens` | `4096` | Token-budget repo-map |
+| `max_diff_bytes` | `524288` | Max diff-grootte (bytes) die de mapper volledig parseert (tree-sitter); groter → diff-only summary. Sinds 2026-08-30 512 KB (was 100 KB): zware productie-PRs vielen anders in de fail-safe terwijl het volledige AST-path maar ~2 s kost en de token-truncatie bewezen correct is |
 
 ## Hoe de repo-context werkt
 
@@ -86,9 +87,9 @@ faalt de workflow bij de eerste PR.
 2. **De review-jobs** downloaden het artifact en geven het mee als
    `artifact_path` aan de pr-agent action. De action injecteert de context in
    `extra_instructions` van `/review`, `/describe` en `/improve`.
-3. **Fail-safes**: oversized diff (>102400 bytes) → diff-only summary;
-   geen wijzigingen → lege context (pr-agent draait door); parse-fouten →
-   bestand overgeslagen (nooit crash).
+3. **Fail-safes**: oversized diff (> `max_diff_bytes`, default 524288) →
+   diff-only summary; geen wijzigingen → lege context (pr-agent draait
+   door); parse-fouten → bestand overgeslagen (nooit crash).
 
 ## Lokale test (mapper)
 
