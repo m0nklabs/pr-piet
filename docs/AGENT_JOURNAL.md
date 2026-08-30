@@ -67,3 +67,31 @@
   PR na verificatie.
 - **Mapper-aanroep in de map-job gebruikt `${MAX_DIFF_BYTES}` als string** in de
   shell — workflow input type `number` stringified netjes; geen quotes-probleem.
+
+## 2026-08-30 — token-verbruik-analyse (gateway capture)
+
+- **Gateway-capture lokatie**: `/home/flip/llama_cpp_guardian/data/capture/guardian_capture_*.jsonl.gz`
+  (rotatie per ~1-1,5 h; naam = start-epoch; `current` = actief). Vlak record-schema:
+  `prompt_tokens`, `completion_tokens`, `total_tokens`, `reasoning_content`,
+  `response_content`, `duration_ms`, `client_ref` (hash van de key), `timestamp_utc`.
+  Let op: `completion_tokens` kan als float serialiseren (`131072.0`) — match met
+  int(), niet met substring. `guardian_capture_current.jsonl.gz` is vaak truncatief
+  (EOFError bij lezen) — per bestand try/except.
+- **client_ref-hash van pr-piet**: `07bc50a6220f5714951bbf88f3ef304b7671eaf621f19b00213386af1117bd5b`.
+  Capture bevat géén request-payload → PR-identificatie via timing kruisverwijzen.
+- **Dashboard-tijden = request-START**: de capture-`timestamp_utc` is het EIND
+  (duur erbij optellen). Voorbeeld: gebruikers-zag 18:56 → call eindigde 17:09:13Z
+  met duration 735,8 s.
+- **Output = reasoning + content**: deepseek-v4-flash-0731 zet vrijwel alles in
+  `reasoning_content`. Geval 30-08 17:09Z: 23.331 output = ~23.290 reasoning
+  (92.696 chars) + 148 chars echte review-YAML (`key_issues_to_review: []`).
+  glm-5.2: 16 calls, 27,5k output totaal, 500 tokens leeg — orde groter efficiënter.
+- **Runaway-calls**: 7x op 30-08 output = 131.072 (harde output-cap DeepInfra, 2^17)
+  met reasoning_len=0 ÉN content_len=0 → 922.004 output-tokens = **39% van het
+  pr-piet-verbruik die dag was weggegooide output**. Duur tot 2383 s — dáár moet
+  nog uitgelegd worden waarom ai_timeout=900 en de provider-cap (1200 s) niet
+  klapten (vermoeden: duration_ms omvat failover-retries; `attempts`-veld bestaat).
+- **Succesvolle calls hadden max ~44,6k output** (09:24Z, content slechts 3.566
+  chars) → een max_tokens-cap moet ≥ ~48-65k om geen succesvolle reviews te breken.
+- **Input-bereik 30-08**: 17k-67k. Zware full reviews ~60-67k in; 17k past bij
+  incrementele push-reviews of kleinere PRs (pr-agent prunt de diff op model-budget).
