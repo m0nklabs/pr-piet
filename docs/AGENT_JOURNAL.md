@@ -196,3 +196,14 @@
   comment-bodies van vandaag (10/10 lokalen) + live sandbox-verificatie.
   Voorwaarde aan gebruikers: commando op een eigen regel; commando mid-regel
   wordt bewust genegeerd.
+
+- **Live E2E-bewijs guard (subagent, pr-piet-test PR #11, 2026-08-30
+  22:40-22:50Z):** ① pull_request-run 33339768220 success — volledige
+  pipeline (map + tier1 glm-5.3-flash + tier2), guard proceed=true;
+  ② comment zonder commando → run 33339959995 success met álle functionele
+  steps skipped + guard-notice in beide jobs; ③ "/review" → run
+  33340085748 success, volledige review geplaatst. PR gesloten (niet
+  gemerged), branch verwijderd, caller gerevert naar @main. Methodische
+  nuance: issue_comment-workflows draaien ALTIJD vanaf de default branch —
+  caller-pins voor comment-tests moeten daarom tijdelijk op main van de
+  doel-repo (gevestigd pin/revert-patroon).
