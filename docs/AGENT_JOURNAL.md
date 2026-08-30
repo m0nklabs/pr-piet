@@ -207,3 +207,20 @@
   nuance: issue_comment-workflows draaien ALTIJD vanaf de default branch —
   caller-pins voor comment-tests moeten daarom tijdelijk op main van de
   doel-repo (gevestigd pin/revert-patroon).
+
+- **Runaway #2, nu op het nieuwe model (23:16:02Z):** glm-5.3-flash op een
+  65k-input PR verbrandde het VOLLEDIGE 131.072-token plafond (1725 s,
+  content=0) — het deepseek-signature. Conclusie-verscherping: de runaway-
+  drempel is taakgrootte-gebonden (input ≥ ~50-65k tokens), niet model-
+  gebonden; "stopt natuurlijk" gold slechts tot ~40k input. Tevens G2
+  live bevestigd: 1725 s > ai_timeout=900 — de client-brake faalde
+  (timeout/abort-cancelde de upstream niet; orphan-patroon), en de run werd
+  om 23:32 gecanceld → 28,7 min modeltijd weggegooid.
+- **Mitigatie tier-1:** `config.max_output_tokens: "49152"` in het tier-1
+  env (fork-knop litellm_ai_handler.py:720-725, kwargs.setdefault) — per-job
+  gescope dus veilig voor glm-5.2's 16384-cap in tier-2. Begrenst de
+  server-side schade (incl. orphans) op ~48k tokens / ~650 s; laat het
+  échte fix (reasoning-cap injectie, gateway-side) de calls laten slagen.
+  De E2E-kwaliteitsvraag bij cappen (operator-doubt) blijft staan: voor de
+  runaway zelf is cappen strikt beter (null content kan niet slechter), voor
+  zware wél-geslaagde calls blijft de A/B-aanbeveling overeind.
