@@ -11,7 +11,7 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
 │    └─ uses: m0nklabs/pr-piet/.github/workflows/reusable-pr-piet.yml@main
 │         ├─ job map          : repo_mapper.py → .pr_piet/context.md    │
 │         │                    (géén secrets; tree-sitter + PageRank)    │
-│         ├─ job review_tier1 : deepseek-v4-flash-0731 + repo-context   │
+│         ├─ job review_tier1 : glm-5.3-flash + repo-context            │
 │         │                    (artifact_path-injectie), geen fallback  │
 │         └─ job review_tier2 : OPTIONEEL: z-ai/glm-5.2 second opinion  │
 │                                alleen als tier 1 "geen problemen"     │
@@ -25,7 +25,7 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
 | Runtime | `m0nklabs/pr-agent@main` (onze fork van The-PR-Agent/pr-agent; patch: conditional `suggested_fix` veld, zie `PR-PIET-PATCH.md` in de fork) | Upstream-compatible + single-call review+suggesties in 1 modelcall; `artifact_path`-input injecteert repo-context natively in de prompts |
 | Context | `scripts/repo_mapper.py` (tree-sitter + PageRank) | Aider-stijl: gewijzigde symbolen + callers/callees, gecomprimeerd naar ~4k tokens |
 | Security | map-job **zonder secrets**, review-jobs met secrets | PR-code is untrusted; secrets alleen waar pr-agent ze nodig heeft |
-| Models | `deepseek/deepseek-v4-flash-0731` (tier 1), `z-ai/glm-5.2` (tier 2) | Beide open-weights, live in de gateway-catalog |
+| Models | `z-ai/glm-5.3-flash` (tier 1), `z-ai/glm-5.2` (tier 2) | Beide open-weights, live in de gateway-catalog |
 | Fail-safes | geen `fallback_models`; truncate naar diff-only bij overflow | Model-fouten worden zichtbaar, context-overflow degradeert netjes |
 | Publicatie | Formele GitHub review via REST API (Copilot-look) | `submit_review.py` zet de pr-agent JSON-output om naar `POST /pulls/{n}/reviews` met `event` (CHANGES_REQUESTED/COMMENT) + inline comment-threads; de "PR Reviewer Guide"-markdown wordt de review-body |
 
@@ -67,7 +67,7 @@ faalt de workflow bij de eerste PR.
 | `pr_number` | — (verplicht) | PR-nummer (event payload) |
 | `base_branch` | repo default | Basis-branch voor de diff |
 | `enable_tier2` | `true` | Tier-2 second opinion aan/uit |
-| `model_tier1` | `openai/deepseek/deepseek-v4-flash-0731` | Tier-1 model via gateway |
+| `model_tier1` | `openai/z-ai/glm-5.3-flash` | Tier-1 model via gateway (sinds 2026-08-30; was deepseek-v4-flash-0731 — reasoning-ramp, zie HANDOFF) |
 | `model_tier2` | `openai/z-ai/glm-5.2` | Tier-2 model via gateway |
 | `gateway_base_url` | `http://172.17.0.1:11434/v1` | OpenAI-compatibele gateway URL (bereikbaar vanuit docker-container via host-bridge) |
 | `auto_describe` / `auto_improve` | `true` / `true` | Auto-tools bij PR-opened |
@@ -104,7 +104,7 @@ python3 -m venv .venv
 
 ## Beveiliging & modelbeleid
 
-- **Alleen open-weights**: `STRICT_OPEN_WEIGHTS_ONLY` (deepseek-v4-flash-0731,
+- **Alleen open-weights**: `STRICT_OPEN_WEIGHTS_ONLY` (glm-5.3-flash,
   z-ai/glm-5.2). Voeg geen closed-weights modellen toe.
 - **Geen fallback**: `fallback_models = []` — model-fouten zijn zichtbaar.
 - **Secrets**: de gateway-key zit alleen in GitHub Secrets; nooit in deze

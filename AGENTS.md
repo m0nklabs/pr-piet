@@ -24,7 +24,7 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    productieve stappen; poll niet in de hoofd-context. (Zie ook de
    dsh-richtlijn over achtergrond-jobs: nooit busy-pollen in de hoofdlus.)
 1. **Alleen open-weights modellen.** `STRICT_OPEN_WEIGHTS_ONLY`:
-   `deepseek/deepseek-v4-flash-0731` (tier 1) en `z-ai/glm-5.2` (tier 2,
+   `z-ai/glm-5.3-flash` (tier 1, sinds 2026-08-30) en `z-ai/glm-5.2` (tier 2,
    optionele second opinion). Nooit closed-weights modellen toevoegen.
 2. **GEEN fallback_models.** Een model- of gateway-fout moet een rode
    workflow zijn, geen stille degradatie. `fallback_models = []` blijft leeg.
@@ -83,7 +83,7 @@ doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
        │                    The-PR-Agent/pr-agent; patch: conditional
        │                    suggested_fix veld, zie PR-PIET-PATCH.md daar)
        │                    met artifact_path=.pr_piet/context.md,
-       │                    model=openai/deepseek/deepseek-v4-flash-0731,
+       │                    model=openai/z-ai/glm-5.3-flash,
        │                    fallback_models=[], OPENAI.API_BASE=gateway
        │                    → detect_review_clean.py (tier1_clean output)
        └─ job review_tier2 : alleen als enable_tier2 && tier1_clean

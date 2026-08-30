@@ -46,10 +46,10 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (open-weights, via gateway)."
+        description: "Tier-1 model (open-weights, via gateway). Sinds 2026-08-30 glm-5.3-flash: E2E-bewezen 3/3 geplante bugs + formele review (pr-piet-test PR #9), natuurlijke stop-discipline (73 s, 3,9k out) i.v.m. deepseek's reasoning-ramp (131k provider-default burn, 39% dagverspilling)."
         required: false
         type: string
-        default: "openai/deepseek/deepseek-v4-flash-0731"
+        default: "openai/z-ai/glm-5.3-flash"
       model_tier2:
         description: "Tier-2 second-opinion model."
         required: false

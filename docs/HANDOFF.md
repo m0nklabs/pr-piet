@@ -130,3 +130,62 @@ branch-pin terecht als "Temporary Pin": dogfooding-bewijs van het verdict-beleid
 caller-pin (`uses:` + `pr_piet_ref` op de branch) + 180 KB dummy-module
 (`sandbox/dummy_big_module.py`, lokaal pre-verifieerd) → subagent-verificatie
 van de CI-log → pas daarna fast-forward merge naar main.
+
+## Tier-1 modelwissel: deepseek → glm-5.3-flash (2026-08-30, avond)
+
+**Beslissing:** tier-1 default is nu `openai/z-ai/glm-5.3-flash` (workflow-input
+`model_tier1`); tier-2 blijft `z-ai/glm-5.2`. deepseek-v4-flash-0731 is
+teruggetrokken uit tier-1. Een operator kan per caller terug naar een ander
+model via de `model_tier1`-input (geen code-wijziging nodig).
+
+**Waarom (evidentie-trail, 4 onafhankelijke sporen):**
+
+1. **Productie-statistiek (capture, hele dag):** deepseek genereerde per review
+   88-96% reasoning-tokens, dagtotaal 39% verspilling (7×131.072-token calls
+   met null content, finish=length). glm-5.2 (tier-2 productie): altijd
+   `stop`, 20-30 s per review.
+2. **Gecontroleerde probes (subagent B, identieke payload, max_tokens=16000):**
+   deepseek inconsistent (1× stop op 5.427, 1× length op 15.999 reasoning +
+   null content); glm-5.3-flash stopt natuurlijk (9.057 out, 8.460 reasoning,
+   2.612 chars content, 215 s); glm-5.2 altijd stop (1.643 out, 21,5 s).
+3. **E2E met geplande bugs (subagent A, exacte tier-1-aanstuur,
+   require_suggested_fix=true):** glm-5.3-flash 3/3 bugs + formele review
+   CHANGES_REQUESTED geplaatst (pr-piet-test PR #9,
+   review-5061540024), 73 s, 3,9k out (81% reasoning). glm-5.2 ving
+   inhoudelijk óók 3/3 maar kreeg 0/2 formele reviews geplaatst: de
+   suggested_fix-output brak de YAML-parse in `submit_review.py`
+   (de-geïndenteerde block scalar) — daarmee blijft glm-5.2 tier-2 tot de
+   parse-robustheid gefixt is.
+4. **Root cause van de deepseek-runaways (subagent C, fork-code):** pr-agent
+   stuurt géén `max_tokens` (basis-kwargs bevatten alleen
+   model/messages/timeout/api_base; `config.max_output_tokens` default 0 =
+   niet verzonden) → de 131.072-cap was de DeepInfra service-default,
+   volledig verbrand aan reasoning. De fork-documentatie beschrijft precies
+   dit mechanisme ("Without max_tokens some providers apply a low
+   service-side default … which reasoning can fully consume"). De fork-knop
+   bestaat (`config.max_output_tokens` env) maar is globaal over modellen —
+   gevaarlijk met glm-5.2's 16.384-cap — dus NIET ingesteld; de reasoning-cap
+   (`reasoning: {max_tokens}`) wordt al 1-op-1 door de gateway doorgelaten
+   (`routing.py:198-237`).
+
+**Speedup:** E2E zelfde taak: deepseek 24,3k in / 21,3k out (88% reasoning) /
+446 s vs glm-5.3-flash 4.055 in / 3.852 out / 73 s. Met reasoning-cap
+(gateway-side injectie, nog niet geïmplementeerd): ~30 s en méér content.
+
+**Openstaand (niet in dit repo opgelost):**
+
+- **Gateway-side reasoning-cap injectie** voor `z-ai/glm-5.3-flash`
+  (bewezen effectief: reasoning 8.460 → 111/267, 7× sneller; alleen Z.AI
+  honoreert hem, DeepInfra negeert hem bij deepseek). Brieven voor de gateway-bughunter:
+  `llama_cpp_guardian/scratch/pr-piet-guardian-bugreport-2026-08-30.json`
+  + `pr-piet-capture-feedback-2026-08-30.json`.
+- **submit_review.py hardening** (2 bugs): (1) YAML-parse-robustheid voor
+  de-geïndenteerde suggested_fix block scalars; (2) parse-faal bij een
+  éérste review exit 0 (stilletjes groen) — schendt harde regel 2; de
+  `::error::`-fallback triggert alleen bij stale-repost (rc 3).
+- **Capture-bug G1 bevestigd + root cause gelokaliseerd:** de non-stream
+  extractor (`capture_dispatch.py:264-357`) leest nooit
+  `message.reasoning`/`reasoning_content` en leest `finish_reason` van het
+  verkeerde niveau (choice, niet message); veld ontbreekt bovendien in het
+  record-schema. Repro: ds-cap-probe 18:13:55Z — raw response 67.971 chars
+  reasoning, capture 0/0.

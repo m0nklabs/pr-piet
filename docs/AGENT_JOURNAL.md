@@ -95,3 +95,50 @@
   chars) → een max_tokens-cap moet ≥ ~48-65k om geen succesvolle reviews te breken.
 - **Input-bereik 30-08**: 17k-67k. Zware full reviews ~60-67k in; 17k past bij
   incrementele push-reviews of kleinere PRs (pr-agent prunt de diff op model-budget).
+
+## 2026-08-30 (avond) — modelvergelijkingssporen + capture-bugs
+
+- **131k-runaways opgelost (dubbele oorzaak):** (1) pr-agent stuurt geen
+  max_tokens → DeepInfra service-default 131.072 gold (fork-knop
+  `config.max_output_tokens` bestaat, default 0 = niet verzonden;
+  litellm_ai_handler.py:720-725, 864-867); (2) deepseek's reasoning-behoefte
+  is sterk run-variabel (5,3k tot ≥16k op identieke payload) — bij 4k budget
+  praktisch altijd length/null, bij 16k nog 1/2 runs length.
+- **glm-5.3-flash is géén runaway-case** (eerdere 4k-test was een
+  budget-artefact): stopt natuurlijk bij ~9k totaal (8,5k reasoning,
+  2,6k chars content, stop). Mijn eerste framing "zelfde probleem als
+  deepseek" was te sterk — gecorrigeerd.
+- **reasoning-cap `{"reasoning":{"max_tokens":N}}`:** gateway filtert hem
+  niet weg (routing.py prepare_cloud_candidate_request 1-op-1 doorgifte);
+  effectief bij glm-5.3-flash via Z.AI (reasoning 8460 → 111/267, 7×
+  sneller, méér content), WERKLOOS bij deepseek via DeepInfra (genegeerd:
+  15.999 reasoning, length, null). N.b.: de fork verstuurt reasoning-params
+  alleen bij `openrouter/`-modelnamen — `openai/...` gaat zonder; cap-injectie
+  moet dus gateway-side (of fork-patch).
+- **E2E tier-1 kandidaten met 3 geplande bugs (pr-piet-test #9/#10):**
+  glm-5.3-flash 3/3 + formele review (CHANGES_REQUESTED, 73 s);
+  glm-5.2 3/3 inhoudelijk maar 0/2 formele reviews — suggested_fix brak de
+  YAML-parse (block-scalar-indentatie) in submit_review.py. dm-rate:
+  glm-5.2 reasoning 47-63% van out vs glm-5.3-flash 81% (en deepseek 88-96%
+  in productie).
+- **Nieuwe stack-bug ontdekt (submit_review.py):** parse-faal bij een
+  éérste review (geen vorige review op de PR) exit 0 → groene run met
+  háár geen review geplaatst; de rc-3 `::error::` fail-safe triggert alleen
+  bij stale-repost. Schendt harde regel 2. Fix-kandidaat samen met de
+  YAML-robustheid.
+- **Capture-bug G1 bevestigd met repro + root cause:** non-stream extractor
+  (capture_dispatch.py:264-357) leest nooit message.reasoning(_content) en
+  pakt finish_reason van het verkeerde niveau (message i.p.v. choice);
+  ds-cap-probe: raw 67.971 chars reasoning → capture 0/0 (usage wél juist).
+  Calls mét content tonen tot 141k chars reasoning — geen size-limiet, wel
+  een pad/veld-bug. finish_reason ontbreekt óók in het record-schema (C4).
+- **Capture-scan-pitfalls (nog steeds geldig):** floats in completion_tokens
+  (16.000,0), EOFError op _current, glob-epoch-prefix filtering; nonce in
+  user-veld nodig — de response-cache zit in OpenRouter zelf
+  (X-OpenRouter-Cache; key = SHA-256 body+user, providers.py:627-631).
+- **G2 (39,7-min call) versmald:** cancellation-machinerie bestaat voor beide
+  paden (queue_helpers.py:88 watcher + _await_or_cancel_request
+  routing.py:940-946) en de service (PID 1239, gestart 29-08) had die code al;
+  geen disconnect-logregel → ofwel is_disconnected() vuret niet voor
+  non-streamed requests in de docker→nginx-keten, ofwel brak de client nooit
+  af. Repro-plan in het bugreport-JSON.
