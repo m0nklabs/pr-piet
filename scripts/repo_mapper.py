@@ -477,8 +477,18 @@ def build_context(
     for s in symbols:
         by_file[s.file].append(s)
 
+    # Belangrijkste bestanden eerst (hoogste churn), zodat de hard-truncate op
+    # het token-budget de kern van de PR laat overleven in plaats van de
+    # alfabetisch-eerste bestanden (gevonden op PR #12 guardian-llmprovider-gateway:
+    # het kernbestand caretaker_runtime.py werd geknipt, manager.py bleef).
+    churn_by_file: Dict[str, int] = defaultdict(int)
+    for c in changes:
+        churn_by_file[c.path] += c.additions + c.deletions
+        if c.old_path != c.path:
+            churn_by_file[c.old_path] += c.additions + c.deletions
+
     defs_section = ["## Gewijzigde symbolen", ""]
-    for file in sorted(by_file):
+    for file in sorted(by_file, key=lambda f: (-churn_by_file.get(f, 0), f)):
         defs_section.append(f"### `{file}`")
         for s in sorted(by_file[file], key=lambda x: (x.line, x.name)):
             defs_section.append(f"- {s.kind} **{s.qualified}** (regel {s.line}): {s.signature}")
@@ -546,14 +556,21 @@ def build_context(
             lines = part.splitlines()
             kept: List[str] = []
             for line in lines:
-                if used + approx_tokens("\n".join(kept) + "\n" + line) <= budget:
+                candidate = "\n".join(kept + [line])
+                # +12 tokens reserve voor de truncate-marker, zodat een
+                # ingekorte sectie GARANDEERD binnen (budget - used) blijft.
+                # Zonder die reserve kon de check hieronder de héle sectie
+                # weggooien wanneer de inkorting 1-12 tokens overschreed
+                # (regressie gevonden op PR #12 guardian-llmprovider-gateway).
+                if used + approx_tokens(candidate) + 12 <= budget:
                     kept.append(line)
                 else:
-                    kept.append("_... (verder ingekort wegens token-budget)_")
                     break
-            part = "\n".join(kept)
-            if approx_tokens(part) <= 0:
-                break
+            if kept:
+                kept.append("_... (verder ingekort wegens token-budget)_")
+                part = "\n".join(kept)
+            else:
+                part = ""
         if used + approx_tokens(part) > budget:
             break
         result_parts.append(part)
@@ -620,7 +637,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         for c in sorted(changes, key=lambda x: (x.additions + x.deletions), reverse=True)[:40]:
             summary.append(f"- `{c.path}` (+{c.additions}/-{c.deletions})")
         output.write_text("\n".join(summary) + "\n", encoding="utf-8")
-        log(f"geschreven: {output} ({approx_tokens(summary)} tokens)")
+        log(f"geschreven: {output} ({approx_tokens(chr(10).join(summary))} tokens)")
         return 0
 
     changes = get_changed_files(repo, args.base, args.head, ignore)
