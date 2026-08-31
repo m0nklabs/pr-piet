@@ -246,3 +246,19 @@
   tier-1 env: reasoning_max_tokens=32000 (denken gebonden ~7 min, content
   stroomt daarna vrij), max_model_tokens=128000 (volle diff past in 1M
   context), max_output_tokens=49152 blijft backstop. Tier-2 ongewijzigd.
+
+- **Acceptatietest coverage-fix (guardian PR #17, run 33386534150):**
+  joblog `Tokens: 116467, total tokens under limit: 128000, returning full
+  diff` (voor: `over limit: 64000, pruning diff`) → 0 ontbrekende
+  bestanden (was 17). Kernbestanden hebben nu bevindingen + inline
+  threads: echte OverflowError-fail-open bevinding in capture_dispatch.py
+  (de review vond dus wát de gedeeltelijke review gemist had!). Modelcall
+  52,9 s (was 754 s bij zelfde PR, oude config) — reasoning-budget = 14×
+  sneller. Capture: prompt 120389 / completion 2152 / 50523 ms.
+  Verdict CHANGES_REQUESTED (conservatieve gradering correct).
+  De kwaliteits-doubt van de operator is hiermee empirisch beantwoord:
+  gebonden reasoning + volledige coverage = BETERE reviews, niet slechtere.
+- **Push/run-race-les:** een /review-comments-run resolveert main op
+  run-start; een push tijdens een lopende run wordt niet meegenomen —
+  bij acceptatietests na een push: check de config-dump in de joblog
+  (of de "Applying reasoning budget"-regel) vóór je concludeert.
