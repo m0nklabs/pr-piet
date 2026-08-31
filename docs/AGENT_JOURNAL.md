@@ -231,3 +231,18 @@
   max_tokens=49152 → HTTP 200, stop, verse usage ($0,00053, 33,6 s) —
   Z.AI accepteert de waarde. PR gesloten (nooit gemerged), branches
   verwijderd, sandbox-main ongewijzigd.
+
+- **Coverage-bug (guardian PR #17, 00:2xZ):** review zei "No major issues
+  detected" terwijl 10/33 bestanden waren overgeslagen vanwege het
+  token-budget (incl. capture_dispatch.py — het G1-bestand — en
+  stream_assembler.py); tier-2 deelt dezelfde 64k-clip → dubbel valse
+  geruststelling. Oorzaak: max_model_tokens=64000 (deepseek-era) vs
+  ~85-95k diff-tokens. Ontbrekende schakel uit de catalogus:
+  glm-5.3-flash heeft 1M context én provider-default reasoning effort
+  = max/mandatory — de provider kiest max zolang niemand een
+  reasoning-parameter stuurt.
+- **Fix (fork 3934878 + workflow):** fork-knop `config.reasoning_max_tokens`
+  voor openai/-modellen (spiegeling van de openrouter-block; inert bij 0);
+  tier-1 env: reasoning_max_tokens=32000 (denken gebonden ~7 min, content
+  stroomt daarna vrij), max_model_tokens=128000 (volle diff past in 1M
+  context), max_output_tokens=49152 blijft backstop. Tier-2 ongewijzigd.

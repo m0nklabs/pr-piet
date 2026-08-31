@@ -295,7 +295,19 @@ jobs:
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
           config.max_output_tokens: "49152"
-          config.max_model_tokens: "64000"
+          # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
+          # kiest de provider zelf max-effort (mandatory voor glm-5.3-flash)
+          # → 26-31k reasoning op zware PR's. Met 32000 is het denken gebonden
+          # (~7 min totaal) en stroomt content daarna vrij. Bewezen effectief
+          # via Z.AI: reasoning 8460 → 111/267 mét méér content.
+          config.reasoning_max_tokens: "32000"
+          # Input-budget: 64k was deepseek-era. PR's van 33 bestanden/+4795
+          # regels (~85-95k diff-tokens) werden DEELS gereviewd — guardian
+          # PR #17: 10 bestanden overgeslagen ("Review coverage"-waarschuwing)
+          # incl. capture_dispatch.py, terwijl het verdict "No major issues"
+          # luidde. Context glm-5.3-flash = 1M → 128000 past ruim; tier-2
+          # blijft bewust op 64000 (glm-5.2, second opinion).
+          config.max_model_tokens: "128000"
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
