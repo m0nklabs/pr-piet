@@ -224,3 +224,10 @@
   De E2E-kwaliteitsvraag bij cappen (operator-doubt) blijft staan: voor de
   runaway zelf is cappen strikt beter (null content kan niet slechter), voor
   zware wél-geslaagde calls blijft de A/B-aanbeveling overeind.
+
+- **Live E2E-bewijs output-cap (subagent, pr-piet-test PR #12, run
+  33343193064):** env-dump tier-1 toont `max_output_tokens: 49152`, tier-2
+  dump toont `0` (per-job scoping bewezen); directe gateway-probe
+  max_tokens=49152 → HTTP 200, stop, verse usage ($0,00053, 33,6 s) —
+  Z.AI accepteert de waarde. PR gesloten (nooit gemerged), branches
+  verwijderd, sandbox-main ongewijzigd.
