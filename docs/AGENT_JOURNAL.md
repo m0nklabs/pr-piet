@@ -262,3 +262,15 @@
   run-start; een push tijdens een lopende run wordt niet meegenomen —
   bij acceptatietests na een push: check de config-dump in de joblog
   (of de "Applying reasoning budget"-regel) vóór je concludeert.
+
+- **Productie-bevestiging (cryptotrader PR #380, run 34114070005, 09-02
+  11:14:57Z):** de volledige herstelde stack live bewezen — reasoning-budget
+  32000 actief (logregel), formele review CHANGES_REQUESTED met 3 inline
+  threads + suggested_fix, coverage schoon (6 bestanden volledig), tier-1
+  job 61 s, nul faal-signaturen (finish stop, 0× length/empty). Ving
+  terecht een ticket-mismatch (PR Kelly-docs vs ticket pytest-bump) +
+  duplicate-route-bug. En op cryptotrader PR #453: tier-2 (glm-5.2)
+  draaide als second opinion na tier1_clean — de gate werkt. G3-fix door
+  de guardian-agent bevestigd via bare-name probe (HTTP 200, was 404).
+  Les: pull_request- en issue_comment-runs horen bij VERSCHILLENDE PR's —
+  attribueer runs via de API (head-branch/PR-nummer), niet op vermoeden.
