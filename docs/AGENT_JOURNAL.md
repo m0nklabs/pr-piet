@@ -297,3 +297,21 @@
   audit-comments op PR #22 zijn verwijderd. Resterend: caller-rollout
   naar de overige ~48 repos (sjabloon v3 staat in
   examples/caller-pr-piet.yml).
+
+- **Tier-2 gate #2 live (4e6eae0, 09-23):** tweede poortwachter
+  `scripts/tier2_pending_guard.py` — tier-2 skipt zolang de laatste
+  pr-piet CHANGES_REQUESTED (marker `pr-piet-review:v1`) gepind is op de
+  huidige head; een fix-push heropent de gate. Motief: de
+  guardian-PR-#22-observatie (tier-2 bevestigt "no major issues" terwijl
+  er open suggesties staan). Workflow: nieuwe `pending-cr`-step in
+  review_tier1 VÓÓR de submit (pre-run staat), output `pending_cr`, gate
+  = `enable_tier2 && tier1_clean && pending_cr != 'true'`. E2E
+  (pr-piet-test PR #14, gesloten niet gemerged): zuiver bewijs —
+  pending_cr=true ÉN tier1_clean=true → tier-2 skip uitsluitend door de
+  gate; na fix-push pending_cr=false + tier-2 ran (51 s). 9/9 unit-tests
+  (tests/test_tier2_pending_guard.py). Lessen: (1) issue_comment-runs
+  nemen de caller van de default branch — caller-pins moeten dus óók op
+  main staan om een branch-ref te testen; (2) een fixture die in de
+  docstring zegt "intentionele bug" wordt door glm-5.3-flash NIET
+  gevlagd (leest de intentie, weigert te flaggen) — test-faults moeten
+  eruitzien als echte bugs.
