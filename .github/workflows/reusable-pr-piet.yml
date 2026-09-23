@@ -197,6 +197,7 @@ jobs:
       pull-requests: write
     outputs:
       tier1_clean: ${{ steps.detect.outputs.tier1_clean }}
+      pending_cr: ${{ steps.pending-cr.outputs.pending_cr }}
     steps:
       - name: Commando-guard (issue_comment)
         id: cmdguard
@@ -251,6 +252,26 @@ jobs:
           rm -rf pr-piet
           git clone --depth 1 --branch "${{ inputs.pr_piet_ref }}" \
             "https://github.com/${{ inputs.pr_piet_repo }}.git" pr-piet
+
+      - name: Tier-2 poortwachter (openstaande CHANGES_REQUESTED op deze head?)
+        id: pending-cr
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Operator-besluit 2026-09-23 (PR #22 guardian): tier 2 (second
+          # opinion) skipt zolang de laatste pr-piet CHANGES_REQUESTED op
+          # precies deze head staat — "/review"-herhalingen op een
+          # geblokkeerde head leveren anders een bevestigende second
+          # opinion op terwijl er open suggesties staan. Een nieuwe push
+          # (nieuwe head) opent de gate weer: dán verifieert tier 2 de
+          # fixes. Berekend VÓÓR de submit-step, zodat de gate de pre-run
+          # staat ziet en niet de review van deze run zelf.
+          pending=$(python3 pr-piet/scripts/tier2_pending_guard.py \
+            "${{ inputs.pr_number }}")
+          echo "pending_cr=${pending}" >> "$GITHUB_OUTPUT"
+          echo "pending_cr=${pending}"
 
       - name: Download repo-context
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
@@ -407,7 +428,7 @@ jobs:
   review_tier2:
     name: "Review tier 2 (${{ inputs.model_tier2 }})"
     needs: [review_tier1]
-    if: ${{ inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' }}
+    if: ${{ inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true' }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 60
     permissions:
