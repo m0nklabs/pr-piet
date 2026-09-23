@@ -333,3 +333,12 @@
   correcte suggestion-fence (ving een echte chunking-bug), tier-2-gates
   conform. Post-deploy-verificatie draait op guardian PR #26.
   Sync-procedure-eis: fork-main-push alléén na E2E via caller-pin.
+
+- **Post-deploy-bewijs (guardian PR #26, run 35861526166, 09-23 12:38):**
+  DEPLOY-GEVALIDEERD — eerste productie-review op de gesyncte fork:
+  from-source build van main (Dockerfile.github_action), budget-regel
+  verbatim, pending_cr=true (CR op actuele head 6a6c1d74) → tier-2
+  skipt, formele review CHANGES_REQUESTED geplaatst. Nuance: 1 inline
+  thread overgeslagen (locatie niet op toegevoegde diff-regel — bekende
+  GitHub-API-limitatie, skip-filter werkte, geen 422). Sync-cyclus
+  volledig afgerond.
