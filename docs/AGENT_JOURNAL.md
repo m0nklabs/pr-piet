@@ -315,3 +315,21 @@
   docstring zegt "intentionele bug" wordt door glm-5.3-flash NIET
   gevlagd (leest de intentie, weigert te flaggen) — test-faults moeten
   eruitzien als echte bugs.
+
+- **Upstream pr-agent sync geployd (fork main 3934878f→633a2361, 09-23):**
+  441 upstream-commits gemerged, nul git-conflicten, álle 7 fork-patches
+  bewezen behouden. Kritische les: git kon het NIET zien — upstream
+  fold-commit e8077630 verwijderde `Dockerfile.github_action` (GHA-image
+  nu target `github_action` in docker/Dockerfile, uv-based); de fork
+  wijzigde action.yaml maar niet het Dockerfile → geruisloze verwijdering,
+  pas de E2E ving het (`no such file or directory`). Fix 633a2361:
+  Dockerfile.github_action hersteld als 1:1-kopie van upstream's
+  base+github_action stages — keep-in-sync-eis gedocumenteerd in
+  PR-PIET-PATCH.md. Upstream-native reasoning-antwoord: hun
+  `reasoning_max_tokens` is openrouter/-route-only → ons
+  config.reasoning_max_tokens-blok blijft nodig (nu op regel 2684 van de
+  handler). Upstream-testsuite 268/268 groen op de merged tree. E2E:
+  from-source build, reasoning-budget-regel verbatim, CHANGES_REQUESTED +
+  correcte suggestion-fence (ving een echte chunking-bug), tier-2-gates
+  conform. Post-deploy-verificatie draait op guardian PR #26.
+  Sync-procedure-eis: fork-main-push alléén na E2E via caller-pin.
