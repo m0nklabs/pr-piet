@@ -342,3 +342,14 @@
   thread overgeslagen (locatie niet op toegevoegde diff-regel — bekende
   GitHub-API-limitatie, skip-filter werkte, geen 422). Sync-cyclus
   volledig afgerond.
+
+- **Caller-sjabloon v3 org-breed uitgerold (09-23):** 47/47 callers
+  bijgewerkt (74 repos gescand, 49 callers, guardian uitgesloten want al
+  v3, pr-piet sjabloon-repo buiten scope), 0 gefaald, spot-checks ok.
+  Inclusief caretaker (de v1-oorzaak van de cancel-mysterie van 09-01).
+  Les ×2: code search was stilletjes incompleet (19/49 gevonden, mét
+  incomplete_results:false) — fallback `gh repo list` per scope was
+  nodig; dry-run ving 3 bouwbugs vóór de eerste PUT. Correctie op het
+  subagent-rapport: `examples/caller-pr-piet.yml` stond AL op v3
+  (ec1e7ed) — de beweerde v1-achterstand klopte niet (geverifieerd via
+  grep + git log).
