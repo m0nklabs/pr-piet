@@ -286,3 +286,14 @@
   de expressie); (2) caller-sjabloon examples/caller-pr-piet.yml bijgewerkt
   (sjabloon v3). Overige 48 callers draaien nog de oudere varianten —
   rollout is handmatig per repo. /review op PR #22 hergetriggerd.
+
+- **Caller-fix v3 live bewezen (guardian PR #22, run 35824369516, 09-23
+  05:54-05:59Z):** review-run draaide ononderbroken uit (4m35s, success)
+  op de gefixte caller (headSha = caller-fix-commit) — geen cancels ondanks
+  eerdere bot-storm; formele review (COMMENTED, 0 issues, coverage vol),
+  reasoning-budget-regel aanwezig, tier-2 (glm-5.2) draaide als second
+  opinion in persistent-comment-mode. ecc-tools[bot]-installatie: operator
+  moet zelf uninstallen via org-UI (token mist admin-scope); de 4
+  audit-comments op PR #22 zijn verwijderd. Resterend: caller-rollout
+  naar de overige ~48 repos (sjabloon v3 staat in
+  examples/caller-pr-piet.yml).
