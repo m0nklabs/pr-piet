@@ -274,3 +274,15 @@
   de guardian-agent bevestigd via bare-name probe (HTTP 200, was 404).
   Les: pull_request- en issue_comment-runs horen bij VERSCHILLENDE PR's —
   attribueer runs via de API (head-branch/PR-nummer), niet op vermoeden.
+
+- **"Review start niet" op guardian PR #22 (09-22 23:10-23:15):** twee
+  /review-runs renden 2-3 min en werden gecanceld; 4 ecc-tools[bot]
+  audit-comments triggerden runs die tijdens de concurrency-claim de
+  lopende reviews vermoordden (cmdguard skipte ze pas erna — te laat).
+  Oorzaak: oude caller-sjabloon zonder event-split én zonder
+  bot-comment-bescherming. Fix dubbel: (1) guardian-caller direct
+  gepusht (b38a6ca): concurrency-groep event-gesplitst + unieke groep
+  `-nc-<comment-id>` voor niet-commando-comments (startsWith '/'-check in
+  de expressie); (2) caller-sjabloon examples/caller-pr-piet.yml bijgewerkt
+  (sjabloon v3). Overige 48 callers draaien nog de oudere varianten —
+  rollout is handmatig per repo. /review op PR #22 hergetriggerd.

@@ -22,14 +22,19 @@ permissions:
   issues: write
   pull-requests: write
 
-# Eén review tegelijk per PR én event-type: nieuwe run cancelt de lopende
-# van het ZELFDE event-type. De groep is gesplitst op event-name zodat een
-# menselijke `/review`-comment de lopende pull_request-auto-review NIET
-# cancelt — een gecancelde run telt als gefaalde required check
-# (merge-state UNSTABLE, gezien op guardian-llmprovider-gateway PR #12).
-# Pushes op dezelfde PR debouncen nog wél onderling.
+# Eén commando-review tegelijk per PR én event-type: een nieuwe
+# /commando-run cancelt de lopende van hetzelfde event-type (versere
+# analyse wint). Twee extra beschermingen:
+# 1. De groep is gesplitst op event-name: een menselijke `/review`-comment
+#    cancelt de pull_request-auto-review niet (gecancelde run = gefaalde
+#    required check = merge-state UNSTABLE, gezien op guardian PR #12).
+# 2. Comments ZONDER commando (bot-audits zoals ecc-tools, status-updates)
+#    krijgen een unieke groep zodat ze de lopende review NIET cancellen
+#    tijdens de concurrency-claim — de cmdguard skipt ze toch (gezien op
+#    guardian PR #22: 4 bot-audit-comments vermoordden 2 lopende reviews).
 concurrency:
-  group: pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}
+  group: >-
+    pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}${{ github.event_name == 'issue_comment' && !startsWith(github.event.comment.body, '/') && format('-nc-{0}', github.event.comment.id) || '' }}
   cancel-in-progress: true
 
 jobs:
