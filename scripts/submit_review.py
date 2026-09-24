@@ -288,6 +288,27 @@ def verdict_from_review(review_data: dict) -> tuple[str, int, int]:
     return event, blocking, nonblocking
 
 
+def is_contentless_review(
+    body: str, comments: list, review_data: dict | None
+) -> bool:
+    """Operator-beleid 2026-09-24 (guardian PR #27): een review zonder
+    bevindingen post NIETS — lege "No major issues detected"-reviews zijn
+    spam. De groene workflow-run is het signaal.
+
+    True alleen als: de body het clean-marker bevat, er geen inline
+    comments/suggesties zijn, én de review-JSON (als die er is) ook geen
+    key-issues heeft. Tegenstrijdige output (body zegt clean, JSON heeft
+    wél bevindingen) is géén contentless review — de JSON wint.
+    """
+    if not body or "no major issues detected" not in body.lower():
+        return False
+    if comments:
+        return False
+    if review_data is not None and extract_key_issues(review_data):
+        return False
+    return True
+
+
 def build_inline_comments(review_data: dict) -> list:
     """Vertaal key-issues naar comments[] voor de reviews API.
 
@@ -378,7 +399,6 @@ def build_suggestion_comments(suggestions_body: str) -> list:
         m = _DIFF_ANCHOR_RE.search(suggestions_body, idx)
         if not m:
             break
-        start = m.start()
         rel_file = (m.group("file") or "").strip()
         a_start = int(m.group("start"))
         a_end = int(m.group("end") or m.group("start"))
@@ -632,6 +652,17 @@ def main() -> int:
     if event == "APPROVE":
         print("geweigerd: event APPROVE is verboden (harde regel: altijd human merge)")
         return 1
+
+    # 3b. Clean-skip (operator-beleid 2026-09-24): review zonder bevindingen
+    # post NIETS. De workflow-cleanup-step ruimt de inhoudsloze guide-comment
+    # en persistent-pointers van deze run op; de groene run is het signaal.
+    if is_contentless_review(body, comments, review_data):
+        print(
+            "(clean review zonder bevindingen — niets gepost "
+            "(operator-beleid 2026-09-24: lege reviews zijn spam)",
+            file=sys.stderr,
+        )
+        return 0
 
     # 4. Head commit-sha
     commit_sha = args.commit_sha or ""
