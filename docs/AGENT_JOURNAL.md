@@ -353,3 +353,22 @@
   subagent-rapport: `examples/caller-pr-piet.yml` stond AL op v3
   (ec1e7ed) — de beweerde v1-achterstand klopte niet (geverifieerd via
   grep + git log).
+
+- **Één review = één post (27e5526 op main, 09-24, operator-beleid
+  guardian PR #27):** clean review post NIETS (contentless-skip in
+  submit_review.py, exit 0; tegenstrijdige output — body clean maar JSON
+  mét issues — post wél, JSON wint); workflow-step "Ruim review-sporen op"
+  verwijdert na geslaagde submit de guide-comment +
+  persistent-pointer-comments van die run (gate op submit-success: exit 3
+  fail-safe laat alles staan). Eindbeeld: clean = 0 posts, findings = 1
+  formele review + inline. E2E (pr-piet-test PR #16, gesloten): fase A
+  clean 0 posts + sweep-log; fase B findings precies 1 review + 1
+  suggestion-fence. Trade-off bewezen: incremental anker zit in de
+  guide-comment (upstream get_previous_review scant alleen
+  issue-comments) → volgende push = full review; de review-body bevat
+  nu `persistent_finding_state` JSON + marker — of formele reviews als
+  anker kunnen dienen (fork-patch: get_previous_review ook over
+  reviews) is een open vervolg-optie. Tier-2 org-breed uit (48/48
+  callers, enable_tier2: false). Les: workflow-bestand pinnen is niet
+  genoeg — scripts komen uit pr_piet_ref (default main), dus E2E-pins
+  moeten ALLEBEI zetten.
