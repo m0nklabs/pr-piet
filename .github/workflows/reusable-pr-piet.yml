@@ -422,18 +422,21 @@ jobs:
           echo "tier1_clean=${clean}" >> "$GITHUB_OUTPUT"
           echo "tier1_clean=${clean}"
 
-      - name: Ruim lege review-sporen op (clean → geen posts)
-        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.detect.outputs.tier1_clean == 'true'
+      - name: Ruim review-sporen op (één review = één post)
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.submit.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Operator-beleid 2026-09-24 (guardian PR #27): een clean review
-          # laat GEEN spoor na op de PR. submit_review.py skipt de formele
-          # review al; hier worden de inhoudsloze pr-agent-artefacten van
-          # deze run verwijderd (guide-comment + persistent-pointer-comments).
-          # Trade-off, bewust geaccepteerd: clean PRs verliezen hun
-          # incrementele anker (volgende push = full review i.p.v. -i);
-          # bevindingen-PRs behouden anchors en posts wél.
+          # Operator-beleid 2026-09-24 (guardian PR #27): één review = één
+          # post. Bij clean: submit_review.py post niets en alle sporen
+          # verdwijnen. Bij bevindingen: de formele review (mét de
+          # overgenomen body) is dé enige post; de pr-agent guide-comment
+          # en persistent-pointer-comments worden na inname verwijderd.
+          # Gate op submit-success: bij een falende submit (exit 3,
+          # fail-safe) blijft alles staan voor diagnose.
+          # Trade-off, bewust geaccepteerd: het incrementele anker zit in de
+          # guide-comment (upstream scant alleen issue-comments), dus de
+          # volgende push draait een full review i.p.v. -i.
           SINCE="${{ steps.ts.outputs.since }}"
           OWNER_REPO="${{ github.repository }}"
           deleted=0
@@ -443,7 +446,7 @@ jobs:
               deleted=$((deleted+1))
             fi
           done
-          echo "clean-sweep: ${deleted} lege comment(s) verwijderd"
+          echo "clean-sweep: ${deleted} pr-agent sporen verwijderd"
 
 # ---------------------------------------------------------------------------
 # Job 3: review tier 2 (GLM second opinion) — alleen bij schone tier 1

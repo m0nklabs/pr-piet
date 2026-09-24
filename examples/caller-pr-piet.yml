@@ -45,7 +45,9 @@ jobs:
       # Werkt voor pull_request én issue_comment events.
       pr_number: ${{ github.event.pull_request.number || github.event.issue.number }}
       base_branch: ${{ github.event.pull_request.base.ref || '' }}
-      enable_tier2: true
+      # Tier-2 (glm-5.2 second opinion) uit per operator-besluit 2026-09-23 —
+      # infrastructuur blijft in de reusable workflow; weer aanzetten = true.
+      enable_tier2: false
       auto_describe: true
       auto_improve: true
       # EXPERIMENTEEL — 1 modelcall i.p.v. 2 voor review + suggesties
