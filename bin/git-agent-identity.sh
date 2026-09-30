@@ -1,35 +1,107 @@
 #!/usr/bin/env bash
 # git-agent-identity.sh — dynamische commit-identity = de naam van de LLM-agent.
 #
-# Wordt gebruikt als `prepare-commit-msg` git-hook (per-checkout) om bij elke
-# commit de auteur/committer automatisch op de modelnaam van de agent te zetten
-# (bv. deepseek-v4-flash-0731), i.p.v. de statische `PR-Piet`-identity.
+# Zet de auteur/committer op de modelnaam van de agent die het werk doet
+# (bv. deepseek-v4.1-flash), i.p.v. de statische `PR-Piet`-identity. Wordt
+# gesourcet door de `gc`-shellfunctie (zie install-dynamic-commit-identity.sh)
+# en gebruikt door bin/refresh-agent-identity.sh om per-checkout identities bij
+# te houden.
 #
-# Model-bepaling (prioriteit):
-#   1. $AGENT_MODEL of $PI_MODEL (env, indien door de agent gezet)
-#   2. `~/.pi/agent/settings.json` -> defaultModel  (openrouter/deepseek/deepseek-v4-flash-0731)
-#   3. laatste route-segment van een `guardian/openrouter/<m>`-adres
-#   valt terug op bestaande identity als niets matcht.
+# Model-bepaling (prioriteit) — geen enkele modelnaam staat in dit script:
+#   1. $AGENT_MODEL of $PI_MODEL              (expliciete override per commit)
+#   2. $DSH_SESSION_JSONL -> laatste `request/header`-record, config.model
+#                                             (het model van DEZE sessie)
+#   3. $DSH_HOME/settings.yaml -> agent-default-model.model
+#                                             (host-default van DeepSeek Harness)
+#   4. $PI_SETTINGS -> defaultModel           (pi-harness default)
+#   niets matcht -> bestaande identity blijft ongewijzigd.
 #
-# Gebruik als hook:  (zie install-git-agent-identity.sh)
+# Paden zijn overschrijfbaar via env (DSH_HOME, DSH_SESSION_JSONL, PI_SETTINGS).
+# Let op: DSH gaat vóór pi, dus op een host waar beide staan wint de
+# DSH-default; forceer een ander model met `AGENT_MODEL=<naam> gc ...`.
+#
+# Gebruik:
+#   source git-agent-identity.sh        # exporteert GIT_AUTHOR_*/GIT_COMMITTER_*
+#   git-agent-identity.sh --print       # print alleen de resolved modelnaam
+#
+# @module git-agent-identity
 
 set -uo pipefail
 
+DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+DSH_SETTINGS="${DSH_SETTINGS:-$DSH_HOME/settings.yaml}"
+PI_SETTINGS="${PI_SETTINGS:-$HOME/.pi/agent/settings.json}"
+
 model=""
+
 # 1. env-aanwijzing
 if [ -n "${AGENT_MODEL:-}" ]; then model="$AGENT_MODEL"; fi
 if [ -n "${PI_MODEL:-}" ]; then model="${PI_MODEL}"; fi
 
-# 2. pi defaultModel
-if [ -z "$model" ] && [ -f "$HOME/.pi/agent/settings.json" ]; then
-  model="$(python3 -c "import json,os; p=os.path.expanduser('~/.pi/agent/settings.json'); d=json.load(open(p)); print(d.get('defaultModel',''))" 2>/dev/null || true)"
+# 2. het model van de lopende DSH-sessie (autoritatief per sessie)
+if [ -z "$model" ] && [ -n "${DSH_SESSION_JSONL:-}" ] && [ -f "${DSH_SESSION_JSONL}" ]; then
+  model="$(DSH_SESSION_JSONL="$DSH_SESSION_JSONL" python3 - <<'PY' 2>/dev/null || true
+import json, os, sys
+path = os.environ["DSH_SESSION_JSONL"]
+last = None
+try:
+    from compression import zstd          # Python >= 3.14
+    with open(path, "rb") as fh, zstd.ZstdFile(fh) as stream:
+        for line in stream:
+            if b'"type":"request/header"' in line:
+                last = line
+except ImportError:                        # oudere python: val terug op zstdcat
+    import subprocess
+    proc = subprocess.run(["zstdcat", path], capture_output=True)
+    for line in proc.stdout.splitlines():
+        if b'"type":"request/header"' in line:
+            last = line
+if last:
+    try:
+        print(json.loads(last)["data"]["header"]["config"]["model"])
+    except Exception:
+        pass
+PY
+)"
+fi
+
+# 3. host-default uit de DSH-settings (geen YAML-dependency, alleen de sleutel)
+if [ -z "$model" ] && [ -f "$DSH_SETTINGS" ]; then
+  model="$(DSH_SETTINGS="$DSH_SETTINGS" python3 - <<'PY' 2>/dev/null || true
+import os, re
+block = False
+with open(os.environ["DSH_SETTINGS"], encoding="utf-8") as fh:
+    for line in fh:
+        if re.match(r"^agent-default-model:\s*$", line):
+            block = True
+            continue
+        if block:
+            if line.strip() and not line[:1].isspace():
+                break
+            match = re.match(r"\s*model:\s*(\S+)", line)
+            if match:
+                print(match.group(1))
+                break
+PY
+)"
+fi
+
+# 4. pi-harness default
+if [ -z "$model" ] && [ -f "$PI_SETTINGS" ]; then
+  model="$(PI_SETTINGS="$PI_SETTINGS" python3 -c "import json,os; print(json.load(open(os.environ['PI_SETTINGS'])).get('defaultModel',''))" 2>/dev/null || true)"
 fi
 
 # normaliseer: haal provider-prefixen weg en houd het model-identiteits-suffix
-# openrouter/deepseek/deepseek-v4-flash-0731            -> deepseek-v4-flash-0731
-# guardian/openrouter/deepseek/deepseek-v4-flash-0731:high -> deepseek-v4-flash-0731
+# openrouter/deepseek/deepseek-v4.1-flash            -> deepseek-v4.1-flash
+# guardian/openrouter/deepseek/deepseek-v4.1-flash:high -> deepseek-v4.1-flash
 if [ -n "$model" ]; then
   model="$(printf '%s' "$model" | sed -E 's#^[^/]+/[^/]+/##; s#^[^/]+/##; s#:[A-Za-z0-9._-]+$##' | tr -d '[:space:]')"
+fi
+
+# --print: alleen de resolved naam (voor scripts), geen env-mutatie
+if [ "${1:-}" = "--print" ]; then
+  [ -n "$model" ] && printf '%s\n' "$model"
+  exit 0
 fi
 
 if [ -n "$model" ]; then
