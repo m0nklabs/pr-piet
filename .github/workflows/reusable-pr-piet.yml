@@ -46,20 +46,20 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (open-weights, via gateway). Sinds 2026-08-30 glm-5.3-flash: E2E-bewezen 3/3 geplante bugs + formele review (pr-piet-test PR #9), natuurlijke stop-discipline (73 s, 3,9k out) i.v.m. deepseek's reasoning-ramp (131k provider-default burn, 39% dagverspilling)."
+        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-03: deepseek-v4.1-flash (1M context, bare-name probe HTTP 200). Let op: de eerdere deepseek-v4-flash-0731-ramp (131k reasoning, null content) is nu afgedekt door config.reasoning_max_tokens + config.max_output_tokens."
+        required: false
+        type: string
+        default: "openai/deepseek/deepseek-v4.1-flash"
+      model_tier2:
+        description: "Tier-2 second-opinion model — draait NIET automatisch (enable_tier2 default false); handmatig via een /review2-comment."
         required: false
         type: string
         default: "openai/z-ai/glm-5.3-flash"
-      model_tier2:
-        description: "Tier-2 second-opinion model."
-        required: false
-        type: string
-        default: "openai/z-ai/glm-5.2"
       enable_tier2:
-        description: "Tier 2 (second opinion) aan/uit."
+        description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
         type: boolean
-        default: true
+        default: false
       auto_describe:
         description: "Draai /describe automatisch bij PR-opened events."
         required: false
@@ -121,7 +121,7 @@ jobs:
           proceed=true
           if [ "$EVENT_NAME" = "issue_comment" ]; then
             if ! printf '%s' "$COMMENT_BODY" | grep -qiE \
-              '^[[:space:]]*/(review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
+              '^[[:space:]]*/(review2|review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
               proceed=false
               echo "::notice::Comment bevat geen pr-agent-commando — PR-Piet overgeslagen (zet het commando op een eigen regel, bv. '/review')"
             fi
@@ -198,6 +198,7 @@ jobs:
     outputs:
       tier1_clean: ${{ steps.detect.outputs.tier1_clean }}
       pending_cr: ${{ steps.pending-cr.outputs.pending_cr }}
+      command: ${{ steps.cmdguard.outputs.command }}
     steps:
       - name: Commando-guard (issue_comment)
         id: cmdguard
@@ -214,14 +215,26 @@ jobs:
           # model-/gateway-fout) blijft onaangetast — de guard draait vóór
           # er een modelcall is.
           proceed=true
+          command=""
           if [ "$EVENT_NAME" = "issue_comment" ]; then
-            if ! printf '%s' "$COMMENT_BODY" | grep -qiE \
+            if printf '%s' "$COMMENT_BODY" | grep -qiE \
+              '^[[:space:]]*/review2([[:space:]]|$)'; then
+              # Handmatige second opinion (operator-besluit 2026-10-03):
+              # tier 2 draait niet automatisch meer, maar mag op verzoek.
+              # pr-agent kent /review2 niet; de tier-2-job herschrijft de
+              # event-payload naar /review voordat de action start.
+              command="review2"
+            elif printf '%s' "$COMMENT_BODY" | grep -qiE \
               '^[[:space:]]*/(review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
+              command="agent"
+            else
               proceed=false
               echo "::notice::Comment bevat geen pr-agent-commando — review overgeslagen (zet het commando op een eigen regel, bv. '/review')"
             fi
           fi
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          echo "command=$command" >> "$GITHUB_OUTPUT"
+          echo "command=${command:-auto}"
 
       - name: Skip als PR al gesloten/gemerged is
         id: pr-state
@@ -302,7 +315,7 @@ jobs:
 
       - name: PR Agent (tier 1)
         id: pr-agent
-        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.cmdguard.outputs.command != 'review2'
 
         # FORK: m0nklabs/pr-agent = upstream The-PR-Agent/pr-agent + onze
         # suggested_fix-patch (zie PR-PIET-PATCH.md in die repo). Terugdraaien
@@ -381,7 +394,7 @@ jobs:
 
       - name: Submit formele GitHub review (Copilot-stijl)
         id: submit
-        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.cmdguard.outputs.command != 'review2'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -424,7 +437,7 @@ jobs:
 
       - name: Detecteer tier-1 resultaat (clean of findings)
         id: detect
-        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.cmdguard.outputs.command != 'review2'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -437,7 +450,7 @@ jobs:
           echo "tier1_clean=${clean}"
 
       - name: Één eindbeoordeling per PR (upsert) + pr-agent-sporen opruimen
-        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.submit.outcome == 'success'
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.cmdguard.outputs.command != 'review2' && steps.submit.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -467,6 +480,18 @@ jobs:
           if [ "${{ steps.detect.outputs.tier1_clean }}" = "true" ]; then
             state="clean"
           fi
+
+          # Run-summary (operator-wens 2026-10-03): de uitslag hoort niet
+          # alleen in de job-log te leven — hij staat ook bovenaan de
+          # run-pagina in de Actions-UI.
+          {
+            echo "## PR-Piet review — ${state}"
+            echo
+            echo "- PR: #${{ inputs.pr_number }}"
+            echo "- Tier-1 model: \`${{ inputs.model_tier1 }}\`"
+            echo "- pr-agent sporen opgeruimd: ${deleted}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           python3 pr-piet/scripts/upsert_status_comment.py \
             --pr-number "${{ inputs.pr_number }}" \
             --state "$state" || true
@@ -477,7 +502,7 @@ jobs:
   review_tier2:
     name: "Review tier 2 (${{ inputs.model_tier2 }})"
     needs: [review_tier1]
-    if: ${{ inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true' }}
+    if: ${{ (inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true') || needs.review_tier1.outputs.command == 'review2' }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 60
     permissions:
@@ -491,6 +516,36 @@ jobs:
           git clone --depth 1 --branch "${{ inputs.pr_piet_ref }}" \
             "https://github.com/${{ inputs.pr_piet_repo }}.git" pr-piet
 
+      - name: Start-tijdstip (voor de verse-comment-detectie)
+        id: ts
+        run: echo "since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Herschrijf het commando naar /review (pr-agent kent /review2 niet)
+        if: needs.review_tier1.outputs.command == 'review2'
+        run: |
+          # Operator-besluit 2026-10-03: /review2 = handmatige second opinion.
+          # pr-agent's commando-parser kent alleen bekende commando's
+          # (pr_agent/agent/pr_agent.py command2class) en leest de
+          # event-payload runtime (github_action_runner.py GITHUB_EVENT_PATH).
+          # We herschrijven hier alleen de commando-tekst van deze comment
+          # naar '/review', zodat de action een gewone review draait — met
+          # config.model = model_tier2. Geen fork-patch nodig.
+          python3 - <<'PY'
+          import json, os
+          path = os.environ["GITHUB_EVENT_PATH"]
+          with open(path) as fh:
+              payload = json.load(fh)
+          comment = payload.get("comment") or {}
+          if comment.get("body"):
+              comment["body"] = "/review"
+              payload["comment"] = comment
+              with open(path, "w") as fh:
+                  json.dump(payload, fh)
+              print("comment.body → /review")
+          else:
+              print("geen comment-body om te herschrijven (niet-fataal)")
+          PY
+
       - name: Download repo-context
         uses: actions/download-artifact@v4
         with:
@@ -502,6 +557,7 @@ jobs:
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
 
       - name: PR Agent (tier 2 — second opinion)
+        id: pr-agent
 
         # FORK: m0nklabs/pr-agent (zie tier 1).
         uses: m0nklabs/pr-agent@main
@@ -528,3 +584,89 @@ jobs:
           # zonder push_trigger skipt de action synchronize volledig.
           github_action_config.handle_push_trigger: "true"
           github_action_config.push_commands: '["/review"]'
+          # Review-JSON als step-output, zodat tier 2 óók een FORMELE review
+          # kan submitten (verdict + inline suggesties) i.p.v. alleen een
+          # markdown-comment — nodig voor /review2 (operator-besluit 2026-10-03).
+          github_action_config.enable_output: "true"
+
+      - name: Submit formele review (tier 2 — second opinion)
+        id: submit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_JSON: ${{ steps.pr-agent.outputs.review }}
+          PR_PIET_SINGLE_CALL: ${{ inputs.single_call_review }}
+        run: |
+          if [ -n "${REVIEW_JSON}" ]; then
+            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review.json
+            json_arg="--review-json /tmp/pr-agent-review.json"
+          else
+            echo "Geen review-JSON in step-output; fallback: body uit issue-comment"
+            json_arg=""
+          fi
+          python3 pr-piet/scripts/submit_review.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --heading "PR Reviewer Guide" \
+            --since "${{ steps.ts.outputs.since }}" \
+            ${json_arg} \
+            > /tmp/submit_review.out 2> /tmp/submit_review.err
+          rc=$?
+          cat /tmp/submit_review.out
+          if [ -s /tmp/submit_review.err ]; then
+            echo "--- stderr ---"
+            cat /tmp/submit_review.err
+          fi
+          # Harde regel 2: lege/afgekapte model-output = rode run (exit 3).
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::PR-Piet tier 2: geen verse review (lege model-output); zie stderr"
+            exit 1
+          fi
+          exit 0
+
+      - name: Detecteer tier-2 resultaat (clean of findings)
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          clean=$(python3 pr-piet/scripts/detect_review_clean.py \
+            "${{ inputs.pr_number }}" \
+            "PR Reviewer Guide" \
+            "${{ steps.ts.outputs.since }}")
+          echo "tier2_clean=${clean}" >> "$GITHUB_OUTPUT"
+          echo "tier2_clean=${clean}"
+
+      - name: Tier-2 eindbeoordeling + pr-agent-sporen opruimen
+        if: steps.submit.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Zelfde beleid als tier 1: één persistente statuscomment per PR
+          # (upsert) en geen pr-agent-guide/pointer-comments op de PR.
+          SINCE="${{ steps.ts.outputs.since }}"
+          OWNER_REPO="${{ github.repository }}"
+          deleted=0
+          for cid in $(gh api "repos/$OWNER_REPO/issues/${{ inputs.pr_number }}/comments?per_page=100&since=$SINCE" \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | test("PR Reviewer Guide|\\[Persistent review\\]")) | .id' 2>/dev/null); do
+            if gh api -X DELETE "repos/$OWNER_REPO/issues/comments/$cid" >/dev/null 2>&1; then
+              deleted=$((deleted+1))
+            fi
+          done
+          echo "clean-sweep: ${deleted} pr-agent sporen verwijderd"
+
+          state="findings"
+          if [ "${{ steps.detect.outputs.tier2_clean }}" = "true" ]; then
+            state="clean"
+          fi
+          {
+            echo "## PR-Piet tier-2 review — ${state}"
+            echo
+            echo "- PR: #${{ inputs.pr_number }}"
+            echo "- Tier-2 model: \`${{ inputs.model_tier2 }}\`"
+            echo "- pr-agent sporen opgeruimd: ${deleted}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          python3 pr-piet/scripts/upsert_status_comment.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --state "$state" || true
