@@ -320,7 +320,7 @@ jobs:
         # FORK: m0nklabs/pr-agent = upstream The-PR-Agent/pr-agent + onze
         # suggested_fix-patch (zie PR-PIET-PATCH.md in die repo). Terugdraaien
         # naar upstream = deze regel terugzetten naar the-pr-agent/pr-agent@main.
-        uses: m0nklabs/pr-agent@review2-alias
+        uses: m0nklabs/pr-agent@main
         with:
           artifact_path: .pr_piet/context.md
         env:
@@ -547,7 +547,7 @@ jobs:
         id: pr-agent
 
         # FORK: m0nklabs/pr-agent (zie tier 1).
-        uses: m0nklabs/pr-agent@review2-alias
+        uses: m0nklabs/pr-agent@main
         with:
           artifact_path: .pr_piet/context.md
         env:
@@ -563,6 +563,10 @@ jobs:
           config.large_patch_policy: "clip"
           config.repo_context_max_lines: "300"
           config.response_language: ${{ inputs.response_language }}
+          # Second opinion mét Apply-knoppen: de fork-prompt levert dan per
+          # bevinding een suggested_fix-veld (E2E-nuance 2026-10-03: zonder
+          # deze knop kreeg de tier-2-inline-thread geen suggestion-fence).
+          pr_reviewer.require_suggested_fix: "true"
           # Tier 2 is uitsluitend een review (second opinion).
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
@@ -582,7 +586,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           REVIEW_JSON: ${{ steps.pr-agent.outputs.review }}
-          PR_PIET_SINGLE_CALL: ${{ inputs.single_call_review }}
+          # Tier 2 haalt zijn suggesties ALTIJD uit de review-JSON
+          # (suggested_fix-velden); tier 2 draait single-call (auto_improve
+          # false), dus er is geen /improve-comment om uit te putten.
+          PR_PIET_SINGLE_CALL: "true"
         run: |
           if [ -n "${REVIEW_JSON}" ]; then
             printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review.json
