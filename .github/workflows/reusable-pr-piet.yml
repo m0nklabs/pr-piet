@@ -286,6 +286,20 @@ jobs:
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
           ls -la .pr_piet/
 
+      - name: Start de statuscomment (⏳ review loopt)
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Operator-wens 2026-10-03: ÉÉN thread-post per PR die gaandeweg
+          # met info wordt bijgewerkt — geen losse posts voor "ik begin",
+          # "dit vond ik" en "dit is mijn conclusie". Hier de start-edit;
+          # de eindbeoordeling volgt in de stap "Één eindbeoordeling per PR".
+          python3 pr-piet/scripts/upsert_status_comment.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --state running || true
+
       - name: PR Agent (tier 1)
         id: pr-agent
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'

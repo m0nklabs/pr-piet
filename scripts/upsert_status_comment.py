@@ -36,9 +36,20 @@ API = "https://api.github.com"
 
 
 def render_status(state: str, head: str, detail: str = "") -> str:
-    """Bouw de statuscomment-body voor de gegeven review-uitkomst."""
+    """Bouw de statuscomment-body voor de gegeven review-fase.
+
+    Één post per PR, in de tijd geëdit: running (start) -> clean/findings
+    (eindconclusie) — nooit drie losse posts.
+    """
     head_ref = f"`{head[:8]}`" if head else "`?`"
     extra = f" — {detail}" if detail else ""
+    if state == "running":
+        return (
+            f"{STATUS_MARKER}\n"
+            f"⏳ **PR-Piet — review loopt**\n\n"
+            f"Head: {head_ref}{extra}\n\n"
+            f"_Deze comment wordt bijgewerkt met de eindbeoordeling._"
+        )
     if state == "clean":
         headline = "✅ **PR-Piet — geen bevindingen**"
         tail = "Alle gewijzigde bestanden zijn bekeken."
@@ -103,7 +114,9 @@ def fetch_head_sha(repo: str, pr_number: str, token: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", required=True)
-    parser.add_argument("--state", required=True, choices=["clean", "findings"])
+    parser.add_argument(
+        "--state", required=True, choices=["running", "clean", "findings"]
+    )
     parser.add_argument("--head", default="")
     parser.add_argument("--detail", default="")
     args = parser.parse_args()

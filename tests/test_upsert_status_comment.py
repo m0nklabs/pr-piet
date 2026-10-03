@@ -38,6 +38,14 @@ class TestRenderStatus(unittest.TestCase):
         body = render_status("clean", HEAD, "12 bestanden")
         self.assertIn("12 bestanden", body)
 
+    def test_running_state_marks_start_of_review(self):
+        """Operator-wens 2026-10-03: één post, in de tijd geëdit —
+        start ("review loopt") en eindconclusie in DEZELFDE comment."""
+        body = render_status("running", HEAD)
+        self.assertIn(STATUS_MARKER, body)
+        self.assertIn("review loopt", body)
+        self.assertIn("`abcdef12`", body)
+
     def test_body_never_matches_sweep_delete_filter(self):
         """Kritiek: de opschoon-step verwijdert comments die op
         'PR Reviewer Guide' of '[Persistent review]' matchen — de
