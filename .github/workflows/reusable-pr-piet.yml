@@ -422,23 +422,24 @@ jobs:
           echo "tier1_clean=${clean}" >> "$GITHUB_OUTPUT"
           echo "tier1_clean=${clean}"
 
-      - name: Ruim review-sporen op (één review = één post)
+      - name: Één eindbeoordeling per PR (upsert) + pr-agent-sporen opruimen
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.submit.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          # Operator-beleid 2026-09-24 (guardian PR #27): één review = één
-          # post. Bij clean: submit_review.py post niets en alle sporen
-          # verdwijnen. Bij bevindingen: de formele review (mét de
-          # overgenomen body) is dé enige post; de pr-agent guide-comment
-          # en persistent-pointer-comments worden na inname verwijderd.
+          # Beleid 2026-09-24: één review = één post. Beleid 2026-10-03
+          # (caretaker PR #12): "clean = niets posten" maakte de uitslag
+          # onzichtbaar — er was geen eindbeoordeling te zien. Daarom nu:
+          # ÉÉN persistente statuscomment per PR die bij elke review wordt
+          # BIJGEWERKT (clean -> ✅ geen bevindingen, findings -> ⚠️ zie de
+          # formele review), plus het opruimen van de pr-agent
+          # guide-comment en persistent-pointer-comments van deze run.
           # Gate op submit-success: bij een falende submit (exit 3,
           # fail-safe) blijft alles staan voor diagnose.
-          # Trade-off, bewust geaccepteerd: het incrementele anker zit in de
-          # guide-comment (upstream scant alleen issue-comments), dus de
-          # volgende push draait een full review i.p.v. -i.
           SINCE="${{ steps.ts.outputs.since }}"
           OWNER_REPO="${{ github.repository }}"
+
           deleted=0
           for cid in $(gh api "repos/$OWNER_REPO/issues/${{ inputs.pr_number }}/comments?per_page=100&since=$SINCE" \
             --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | test("PR Reviewer Guide|\\[Persistent review\\]")) | .id' 2>/dev/null); do
@@ -447,6 +448,14 @@ jobs:
             fi
           done
           echo "clean-sweep: ${deleted} pr-agent sporen verwijderd"
+
+          state="findings"
+          if [ "${{ steps.detect.outputs.tier1_clean }}" = "true" ]; then
+            state="clean"
+          fi
+          python3 pr-piet/scripts/upsert_status_comment.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --state "$state" || true
 
 # ---------------------------------------------------------------------------
 # Job 3: review tier 2 (GLM second opinion) — alleen bij schone tier 1
