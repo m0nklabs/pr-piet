@@ -372,3 +372,23 @@
   callers, enable_tier2: false). Les: workflow-bestand pinnen is niet
   genoeg — scripts komen uit pr_piet_ref (default main), dus E2E-pins
   moeten ALLEBEI zetten.
+
+- **Tier-1 → deepseek-v4.1-flash + /review2 (2026-10-03, operator-besluit;
+  main 5668d44, fork-main 63850809):** tier-1 draait nu
+  `openai/deepseek/deepseek-v4.1-flash` (E2E: reasoning 1525/157 tok, 2×
+  finish stop, ~18 s modeltijd, 90 s run — de 131k-runaway uit augustus
+  wordt door reasoning_max_tokens=32000 + max_output_tokens=49152 volledig
+  getemd). Tier-2 draait NIET automatisch meer (workflow-default
+  enable_tier2=false + 48/48 callers), maar op verzoek via `/review2`:
+  cmdguard herkent het commando, tier-1's reviewstappen skippen, tier-2
+  (model_tier2 = glm-5.3-flash) draait en post een EIGEN formele review +
+  werkt dezelfde persistente status-thread bij.
+  **Belangrijke les (bewezen uit runner-bron):** een host-side herschrijving
+  van `GITHUB_EVENT_PATH` werkt NIET — actions/runner v2.337.0
+  hermaterialiseert event.json vóór élke action-step
+  (`ExecutionContext.WriteWebhookPayload`, `ActionRunner.cs:141`); de fix is
+  een fork-alias `command2class["review2"] = PRReviewer` (patch #5 in
+  PR-PIET-PATCH.md). Verder: gefaalde runs zetten de status-thread nu op
+  "review failed" (hing eerst op "in progress"), het verdict staat ook in de
+  run-summary, en tier-2 kreeg `require_suggested_fix` + single-call
+  suggestiebron zodat de second opinion ook Apply-knoppen heeft.
