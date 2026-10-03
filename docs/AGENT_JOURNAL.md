@@ -402,3 +402,13 @@
   Bewust NIET gekozen: de prefix vervangen door `litellm.custom_llm_provider`
   — dat geeft twee manieren om hetzelfde te doen op precies het punt waar een
   routingfout stil buiten de gateway kan routeren.
+
+- **Check-namen live geverifieerd (2026-10-03, run 37152648074 op
+  pr-piet-test PR #21):** tier-1 checkt als `Review tier 1
+  (deepseek-v4.1-flash)` (geen routingprefix), tier-2 als statische
+  `Review tier 2 (second opinion)` — geskipte jobs in reusable workflows
+  renderen hun `name:`-expressie niet (bewezen: de oude naam verscheen
+  letterlijk als `${{ inputs.model_tier2 }}`), vandaar de statische naam
+  voor de standaard-geskipte tier-2. Dezelfde run bewees end-to-end op
+  main: sobere review, inline suggestie met de juiste fix, één
+  status-thread, nul pr-agent-resten.
