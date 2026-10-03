@@ -60,11 +60,6 @@ on:
         required: false
         type: string
         default: "deepseek-v4.1-flash"
-      model_tier2_label:
-        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. glm-5.3-flash). Puur cosmetisch: het echte model komt uit model_tier2."
-        required: false
-        type: string
-        default: "glm-5.3-flash"
       enable_tier2:
         description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
@@ -523,7 +518,7 @@ jobs:
 # Job 3: review tier 2 (GLM second opinion) — alleen bij schone tier 1
 # ---------------------------------------------------------------------------
   review_tier2:
-    name: "Review tier 2 (${{ inputs.model_tier2_label }})"
+    name: "Review tier 2 (second opinion)"
     needs: [review_tier1]
     if: ${{ (inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true') || needs.review_tier1.outputs.command == 'review2' }}
     runs-on: [self-hosted, Linux]
