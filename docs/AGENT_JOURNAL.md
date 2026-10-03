@@ -392,3 +392,13 @@
   "review failed" (hing eerst op "in progress"), het verdict staat ook in de
   run-summary, en tier-2 kreeg `require_suggested_fix` + single-call
   suggestiebron zodat de second opinion ook Apply-knoppen heeft.
+
+- **Check-naam cosmetisch (main, 2026-10-03):** de tier-jobs tonen de
+  routingprefix (`openai/deepseek/deepseek-v4.1-flash`) in de PR-checks, wat
+  als OpenAI-hosting leest. Toegevoegd: display-only inputs
+  `model_tier1_label`/`model_tier2_label` (default `deepseek-v4.1-flash` /
+  `glm-5.3-flash`) die alleen in de jobnaam gebruikt worden; het echte model
+  + de verplichte `openai/`-prefix blijven ongewijzigd (harde regel 5).
+  Bewust NIET gekozen: de prefix vervangen door `litellm.custom_llm_provider`
+  — dat geeft twee manieren om hetzelfde te doen op precies het punt waar een
+  routingfout stil buiten de gateway kan routeren.
