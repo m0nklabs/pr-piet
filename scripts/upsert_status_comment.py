@@ -53,6 +53,9 @@ def render_status(state: str, head: str, detail: str = "") -> str:
     if state == "clean":
         headline = "**PR-Piet — no findings**"
         tail = "All changed files were reviewed."
+    elif state == "failed":
+        headline = "**PR-Piet — review failed**"
+        tail = "No review was posted; see the workflow run for the error."
     else:
         headline = "**PR-Piet — findings**"
         tail = "See the review with inline suggestions under Reviews."
@@ -115,7 +118,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", required=True)
     parser.add_argument(
-        "--state", required=True, choices=["running", "clean", "findings"]
+        "--state", required=True, choices=["running", "clean", "findings", "failed"]
     )
     parser.add_argument("--head", default="")
     parser.add_argument("--detail", default="")

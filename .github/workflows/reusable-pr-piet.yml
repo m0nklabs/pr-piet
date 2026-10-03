@@ -320,7 +320,7 @@ jobs:
         # FORK: m0nklabs/pr-agent = upstream The-PR-Agent/pr-agent + onze
         # suggested_fix-patch (zie PR-PIET-PATCH.md in die repo). Terugdraaien
         # naar upstream = deze regel terugzetten naar the-pr-agent/pr-agent@main.
-        uses: m0nklabs/pr-agent@main
+        uses: m0nklabs/pr-agent@review2-alias
         with:
           artifact_path: .pr_piet/context.md
         env:
@@ -496,6 +496,19 @@ jobs:
             --pr-number "${{ inputs.pr_number }}" \
             --state "$state" || true
 
+      - name: Statuscomment op 'failed' bij een gefaalde run
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Een gefaalde run mag de persistente thread niet in
+          # "review in progress" achterlaten (gezien bij de mislukte
+          # /review2-E2E, pr-piet-test PR #19).
+          python3 pr-piet/scripts/upsert_status_comment.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --state failed || true
+
 # ---------------------------------------------------------------------------
 # Job 3: review tier 2 (GLM second opinion) — alleen bij schone tier 1
 # ---------------------------------------------------------------------------
@@ -520,32 +533,6 @@ jobs:
         id: ts
         run: echo "since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      - name: Herschrijf het commando naar /review (pr-agent kent /review2 niet)
-        if: needs.review_tier1.outputs.command == 'review2'
-        run: |
-          # Operator-besluit 2026-10-03: /review2 = handmatige second opinion.
-          # pr-agent's commando-parser kent alleen bekende commando's
-          # (pr_agent/agent/pr_agent.py command2class) en leest de
-          # event-payload runtime (github_action_runner.py GITHUB_EVENT_PATH).
-          # We herschrijven hier alleen de commando-tekst van deze comment
-          # naar '/review', zodat de action een gewone review draait — met
-          # config.model = model_tier2. Geen fork-patch nodig.
-          python3 - <<'PY'
-          import json, os
-          path = os.environ["GITHUB_EVENT_PATH"]
-          with open(path) as fh:
-              payload = json.load(fh)
-          comment = payload.get("comment") or {}
-          if comment.get("body"):
-              comment["body"] = "/review"
-              payload["comment"] = comment
-              with open(path, "w") as fh:
-                  json.dump(payload, fh)
-              print("comment.body → /review")
-          else:
-              print("geen comment-body om te herschrijven (niet-fataal)")
-          PY
-
       - name: Download repo-context
         uses: actions/download-artifact@v4
         with:
@@ -560,7 +547,7 @@ jobs:
         id: pr-agent
 
         # FORK: m0nklabs/pr-agent (zie tier 1).
-        uses: m0nklabs/pr-agent@main
+        uses: m0nklabs/pr-agent@review2-alias
         with:
           artifact_path: .pr_piet/context.md
         env:
@@ -670,3 +657,16 @@ jobs:
           python3 pr-piet/scripts/upsert_status_comment.py \
             --pr-number "${{ inputs.pr_number }}" \
             --state "$state" || true
+
+      - name: Statuscomment op 'failed' bij een gefaalde run
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Een gefaalde run mag de persistente thread niet in
+          # "review in progress" achterlaten (gezien bij de mislukte
+          # /review2-E2E, pr-piet-test PR #19).
+          python3 pr-piet/scripts/upsert_status_comment.py \
+            --pr-number "${{ inputs.pr_number }}" \
+            --state failed || true

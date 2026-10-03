@@ -46,12 +46,20 @@ class TestRenderStatus(unittest.TestCase):
         self.assertIn("review in progress", body)
         self.assertIn("`abcdef12`", body)
 
+    def test_failed_state_is_honest(self):
+        """Een gefaalde run mag de thread niet in 'in progress' achterlaten
+        (gezien bij de mislukte /review2-E2E op pr-piet-test PR #19)."""
+        body = render_status("failed", HEAD)
+        self.assertIn(STATUS_MARKER, body)
+        self.assertIn("review failed", body)
+        self.assertIn("No review was posted", body)
+
     def test_body_never_matches_sweep_delete_filter(self):
         """Kritiek: de opschoon-step verwijdert comments die op
         'PR Reviewer Guide' of '[Persistent review]' matchen — de
         statuscomment mag daar nooit onder vallen, anders wist elke run
         zijn eigen eindbeoordeling."""
-        for state in ("clean", "findings"):
+        for state in ("clean", "findings", "failed", "running"):
             body = render_status(state, HEAD)
             self.assertNotIn("PR Reviewer Guide", body)
             self.assertNotIn("[Persistent review]", body)
