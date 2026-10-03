@@ -309,6 +309,66 @@ def is_contentless_review(
     return True
 
 
+def render_review_body(review_data: dict | None, commit_sha: str = "") -> str:
+    """Zakelijke review-body uit de review-JSON (operator-wens 2026-10-03).
+
+    Geen "PR Reviewer Guide 🔍"-tabel met effort-bolletjes en
+    observatie-rijtjes: alleen de uitslag, één meta-regel en de
+    bevindingen zelf. De inline suggesties (Apply-knop) komen uit
+    comments[] en blijven ongewijzigd.
+    """
+    issues = [
+        i for i in extract_key_issues(review_data or {}) if isinstance(i, dict)
+    ]
+    blocking = [i for i in issues if not _issue_is_nonblocking(i)]
+    nonblocking = [i for i in issues if _issue_is_nonblocking(i)]
+
+    if blocking:
+        heading = "## PR-Piet review — changes requested"
+    elif issues:
+        heading = "## PR-Piet review — non-blocking findings"
+    else:
+        heading = "## PR-Piet review — no findings"
+
+    meta_bits = []
+    if commit_sha:
+        meta_bits.append(f"head `{commit_sha[:8]}`")
+    if issues:
+        counts = f"{len(blocking)} blocking"
+        if nonblocking:
+            counts += f", {len(nonblocking)} non-blocking"
+        meta_bits.append(counts)
+
+    lines = [heading]
+    if meta_bits:
+        lines += ["", " · ".join(meta_bits)]
+
+    if issues:
+        lines += ["", "### Findings", ""]
+        for idx, issue in enumerate(issues, start=1):
+            header = (issue.get("issue_header") or "Finding").strip()
+            path = (issue.get("relevant_file") or "").strip()
+            line_no = str(
+                issue.get("end_line") or issue.get("start_line") or ""
+            ).strip()
+            where = ""
+            if path and line_no:
+                where = f" — `{path}:{line_no}`"
+            elif path:
+                where = f" — `{path}`"
+            tag = " (non-blocking)" if _issue_is_nonblocking(issue) else ""
+            lines.append(f"{idx}. **{header}**{tag}{where}")
+            content = (issue.get("issue_content") or "").strip()
+            for text_line in content.splitlines():
+                if text_line.strip():
+                    lines.append(f"   {text_line.strip()}")
+            lines.append("")
+    else:
+        lines += ["", "No blocking issues were found in the changed files."]
+
+    return "\n".join(lines).rstrip()
+
+
 def build_inline_comments(review_data: dict) -> list:
     """Vertaal key-issues naar comments[] voor de reviews API.
 
@@ -695,7 +755,16 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"kon dedup-check niet uitvoeren ({exc}); ga door", file=sys.stderr)
 
-    # 4c. Marker in de review-body zodat latere runs de review herkennen.
+    # 4c. Sobere eigen body (operator-wens 2026-10-03, caretaker PR #12):
+    # de candy-look van pr-agent's "PR Reviewer Guide 🔍"-tabel (effort-
+    # bolletjes, "key observations", tests/security-rijtjes) verdwijnt uit
+    # de formele review; in plaats daarvan een zakelijke samenvatting uit
+    # de review-JSON. Zonder JSON (fallback-route, o.a. suggestie-only
+    # runs) blijft de bestaande markdown-body staan.
+    if review_data is not None:
+        body = render_review_body(review_data, commit_sha)
+
+    # 4d. Marker in de review-body zodat latere runs de review herkennen.
     if body and commit_sha:
         body = body.rstrip() + "\n\n" + _review_marker(commit_sha)
 

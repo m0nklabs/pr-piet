@@ -46,22 +46,22 @@ def render_status(state: str, head: str, detail: str = "") -> str:
     if state == "running":
         return (
             f"{STATUS_MARKER}\n"
-            f"⏳ **PR-Piet — review loopt**\n\n"
+            f"**PR-Piet — review in progress**\n\n"
             f"Head: {head_ref}{extra}\n\n"
-            f"_Deze comment wordt bijgewerkt met de eindbeoordeling._"
+            f"_This comment is updated with the outcome._"
         )
     if state == "clean":
-        headline = "✅ **PR-Piet — geen bevindingen**"
-        tail = "Alle gewijzigde bestanden zijn bekeken."
+        headline = "**PR-Piet — no findings**"
+        tail = "All changed files were reviewed."
     else:
-        headline = "⚠️ **PR-Piet — bevindingen gevonden**"
-        tail = "Zie de formele review (met inline suggesties) bij de Reviews."
+        headline = "**PR-Piet — findings**"
+        tail = "See the review with inline suggestions under Reviews."
     return (
         f"{STATUS_MARKER}\n"
         f"{headline}\n\n"
         f"Head: {head_ref}{extra}\n\n"
         f"{tail}\n\n"
-        f"_Deze comment wordt bij elke review bijgewerkt._"
+        f"_This comment is updated on every review._"
     )
 
 

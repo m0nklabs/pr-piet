@@ -25,14 +25,14 @@ class TestRenderStatus(unittest.TestCase):
     def test_clean_contains_marker_and_verdict(self):
         body = render_status("clean", HEAD)
         self.assertIn(STATUS_MARKER, body)
-        self.assertIn("geen bevindingen", body)
+        self.assertIn("no findings", body)
         self.assertIn("`abcdef12`", body)
 
     def test_findings_points_at_formal_review(self):
         body = render_status("findings", HEAD)
         self.assertIn(STATUS_MARKER, body)
-        self.assertIn("bevindingen gevonden", body)
-        self.assertIn("formele review", body)
+        self.assertIn("findings", body)
+        self.assertIn("inline suggestions", body)
 
     def test_detail_is_appended(self):
         body = render_status("clean", HEAD, "12 bestanden")
@@ -43,7 +43,7 @@ class TestRenderStatus(unittest.TestCase):
         start ("review loopt") en eindconclusie in DEZELFDE comment."""
         body = render_status("running", HEAD)
         self.assertIn(STATUS_MARKER, body)
-        self.assertIn("review loopt", body)
+        self.assertIn("review in progress", body)
         self.assertIn("`abcdef12`", body)
 
     def test_body_never_matches_sweep_delete_filter(self):
