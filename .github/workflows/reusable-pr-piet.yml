@@ -55,6 +55,16 @@ on:
         required: false
         type: string
         default: "openai/z-ai/glm-5.3-flash"
+      model_tier1_label:
+        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. deepseek-v4.1-flash). Puur cosmetisch: het echte model komt uit model_tier1."
+        required: false
+        type: string
+        default: "deepseek-v4.1-flash"
+      model_tier2_label:
+        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. glm-5.3-flash). Puur cosmetisch: het echte model komt uit model_tier2."
+        required: false
+        type: string
+        default: "glm-5.3-flash"
       enable_tier2:
         description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
@@ -184,7 +194,7 @@ jobs:
 # Job 2: review tier 1 (deepseek) — geen fallback, fout = rode workflow
 # ---------------------------------------------------------------------------
   review_tier1:
-    name: "Review tier 1 (${{ inputs.model_tier1 }})"
+    name: "Review tier 1 (${{ inputs.model_tier1_label }})"
     needs: [map]
     runs-on: [self-hosted, Linux]
     # 60 min: grote PRs (bv. +2800 regels) kunnen de review-call dicht bij de
@@ -513,7 +523,7 @@ jobs:
 # Job 3: review tier 2 (GLM second opinion) — alleen bij schone tier 1
 # ---------------------------------------------------------------------------
   review_tier2:
-    name: "Review tier 2 (${{ inputs.model_tier2 }})"
+    name: "Review tier 2 (${{ inputs.model_tier2_label }})"
     needs: [review_tier1]
     if: ${{ (inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true') || needs.review_tier1.outputs.command == 'review2' }}
     runs-on: [self-hosted, Linux]
