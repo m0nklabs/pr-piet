@@ -412,3 +412,28 @@
   voor de standaard-geskipte tier-2. Dezelfde run bewees end-to-end op
   main: sobere review, inline suggestie met de juiste fix, één
   status-thread, nul pr-agent-resten.
+
+- **Incrementeel anker hersteld (2026-10-04, ANKER-WERKT E2E op pr-piet-test
+  PR #23):** pr-piet ruimt de pr-agent guide-comments op (één-post-beleid),
+  dus het incrementeel anker (`/review -i`) moest uit de FORMELE review
+  komen. Twee helften: fork `m0nklabs/pr-agent` main `67d458d5` scant nu ook
+  formele reviews in `get_previous_review` (patch #6, `_ReviewAnchor` want
+  reviews hebben `submitted_at`); pr-piet schrijft de identity-marker
+  (`<!-- pr-agent:review:full|incremental -->`) DIRECT ná de heading in de
+  sobere review-body — de matcher scant alleen de eerste 5 regels
+  (`_REVIEW_IDENTITY_HEADER_LINES`), achteraan geplakt (regel 11) werd het
+  anker gemist (eerste E2E: elke push een full review). Regressietest
+  verankert de positie. Push-run logt nu `## Incremental PR Reviewer Guide`
+  + commits_range sinds de gereviewde head; nul "No previous review found".
+  pr-piet main `209c63e` (pinnen terug naar fork@main), fork main
+  `67d458d5`.
+- **Output-budget faal op mega-PR's gefixt (2026-10-04, guardian PR #28):
+  3× "Failed to review PR" met exact 49.152 completion tokens,
+  finish_reason=length, prompt slechts ~83k (gateway-capture).** De
+  output-cap 49152 was de begrenzer (input 128k en ai_timeout 900s niet);
+  verhoogd naar 131072 (provider-cap). Daarnaast: pr-agent vangt model-
+  fouten zelf af (post "Failed to review PR", exit 0) en de oude fail-safe
+  eiste een stale guide-comment die de sweep opruimt → stille groene run.
+  Nieuw: `find_review_failure` (alleen bot-comments ná `since`, zodat een
+  mens die de tekst citeert nooit vals positief geeft) → return 3 → rode
+  run. pr-piet main `817814d` + `209c63e`.
