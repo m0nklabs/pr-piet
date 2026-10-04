@@ -309,7 +309,36 @@ def is_contentless_review(
     return True
 
 
-def render_review_body(review_data: dict | None, commit_sha: str = "") -> str:
+# Identity-markers die pr-agent zelf in zijn review-comments zet. Wij
+# schrijven ze in ONZE formele review-body, zodat de pr-agent-fork ze ook in
+# formele reviews kan vinden (fork-patch #6, 2026-10-03): pr-piet ruimt de
+# pr-agent guide-comments bewust op (één-post-beleid), dus zonder marker in
+# de review-body vindt `/review -i` nooit een anker en draait elke push een
+# volledige review.
+PR_REVIEW_IDENTITY_FULL = "<!-- pr-agent:review:full -->"
+PR_REVIEW_IDENTITY_INCREMENTAL = "<!-- pr-agent:review:incremental -->"
+INCREMENTAL_HEADING = "Incremental PR Reviewer Guide"
+
+
+def identity_for_body(raw_body: str) -> str:
+    """Kies de pr-agent-identity-marker op basis van de verse review-comment.
+
+    Een incrementele review ('## Incremental PR Reviewer Guide') krijgt de
+    incremental-marker, al het andere de full-marker. Zo blijft de fork het
+    anker correct classificeren wanneer hij onze formele reviews scant.
+    """
+    return (
+        PR_REVIEW_IDENTITY_INCREMENTAL
+        if INCREMENTAL_HEADING in (raw_body or "")
+        else PR_REVIEW_IDENTITY_FULL
+    )
+
+
+def render_review_body(
+    review_data: dict | None,
+    commit_sha: str = "",
+    identity: str = PR_REVIEW_IDENTITY_FULL,
+) -> str:
     """Zakelijke review-body uit de review-JSON (operator-wens 2026-10-03).
 
     Geen "PR Reviewer Guide 🔍"-tabel met effort-bolletjes en
@@ -365,6 +394,11 @@ def render_review_body(review_data: dict | None, commit_sha: str = "") -> str:
             lines.append("")
     else:
         lines += ["", "No blocking issues were found in the changed files."]
+
+    if identity:
+        # Hidden marker zodat de pr-agent-fork (patch #6) deze formele review
+        # als incrementeel anker herkent.
+        lines += ["", identity]
 
     return "\n".join(lines).rstrip()
 
@@ -762,7 +796,10 @@ def main() -> int:
     # de review-JSON. Zonder JSON (fallback-route, o.a. suggestie-only
     # runs) blijft de bestaande markdown-body staan.
     if review_data is not None:
-        body = render_review_body(review_data, commit_sha)
+        # Identiteit uit de verse pr-agent-comment: een incrementele review
+        # krijgt de incremental-marker, anders de full-marker (fork-patch #6
+        # gebruikt die om het incrementele anker in formele reviews te vinden).
+        body = render_review_body(review_data, commit_sha, identity_for_body(body))
 
     # 4d. Marker in de review-body zodat latere runs de review herkennen.
     if body and commit_sha:

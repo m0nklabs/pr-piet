@@ -325,7 +325,7 @@ jobs:
         # FORK: m0nklabs/pr-agent = upstream The-PR-Agent/pr-agent + onze
         # suggested_fix-patch (zie PR-PIET-PATCH.md in die repo). Terugdraaien
         # naar upstream = deze regel terugzetten naar the-pr-agent/pr-agent@main.
-        uses: m0nklabs/pr-agent@main
+        uses: m0nklabs/pr-agent@incremental-anchor-reviews
         with:
           artifact_path: .pr_piet/context.md
         env:
@@ -552,7 +552,7 @@ jobs:
         id: pr-agent
 
         # FORK: m0nklabs/pr-agent (zie tier 1).
-        uses: m0nklabs/pr-agent@main
+        uses: m0nklabs/pr-agent@incremental-anchor-reviews
         with:
           artifact_path: .pr_piet/context.md
         env:

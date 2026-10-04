@@ -86,3 +86,37 @@ class TestRenderReviewBody(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReviewIdentity(unittest.TestCase):
+    """Het incrementele anker (fork-patch #6) leunt op de identity-marker in
+    ONZE formele review-body — pr-piet ruimt de pr-agent guide-comments
+    immers op."""
+
+    def test_default_identity_is_full(self):
+        body = render_review_body(data(BLOCKING), HEAD)
+        self.assertIn("<!-- pr-agent:review:full -->", body)
+
+    def test_incremental_identity_is_used_when_asked(self):
+        from submit_review import PR_REVIEW_IDENTITY_INCREMENTAL
+
+        body = render_review_body(data(BLOCKING), HEAD, PR_REVIEW_IDENTITY_INCREMENTAL)
+        self.assertIn("<!-- pr-agent:review:incremental -->", body)
+        self.assertNotIn("<!-- pr-agent:review:full -->", body)
+
+    def test_identity_helper_picks_incremental_only_for_incremental_body(self):
+        from submit_review import (
+            PR_REVIEW_IDENTITY_FULL,
+            PR_REVIEW_IDENTITY_INCREMENTAL,
+            identity_for_body,
+        )
+
+        self.assertEqual(
+            identity_for_body("## Incremental PR Reviewer Guide\n\nx"),
+            PR_REVIEW_IDENTITY_INCREMENTAL,
+        )
+        self.assertEqual(
+            identity_for_body("## PR Reviewer Guide\n\nno issues"),
+            PR_REVIEW_IDENTITY_FULL,
+        )
+        self.assertEqual(identity_for_body(""), PR_REVIEW_IDENTITY_FULL)
