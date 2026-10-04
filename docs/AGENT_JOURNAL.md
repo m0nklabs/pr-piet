@@ -457,3 +457,15 @@
   NIEUWE `max_output_tokens: 98304` (tier-2 had géén cap → glm kon bij een
   runaway tot ~944k branden). pr-piet main `4001fb8`. /review2-verificatie
   op een mega-PR volgt op verzoek.
+
+- **Tier-1 prompt-budget 512000: full coverage bewezen (2026-10-04, run
+  37218058880, COVER-OK):** de vorige PR #28-review was partieel (26/30
+  bestanden geskipt, "Review coverage"-waarschuwing) door
+  `config.max_model_tokens: 128000` — pr-agent's PROMPT-budget, niet de
+  model-limiet; het model heeft 1M context. Nu 512000 (pr-piet `7351d69`):
+  prompt 31k → 154k tokens, runtime KORTER (8m15s vs 9,5 min), finish=stop,
+  review-state `complete: true, excluded_files: []`. Kanttekening: de
+  verdict wisselde mee (0 blocking, 1 non-blocking UNCERTAIN) — de blocking
+  race-bevinding uit de partiële run verdween in de full run; die thread
+  bekijkt de guardian-agent alsnog. Verdict-gradering klopte: COMMENTED,
+  nooit APPROVE.
