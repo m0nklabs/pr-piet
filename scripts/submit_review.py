@@ -529,6 +529,33 @@ def build_suggestion_comments(suggestions_body: str) -> list:
 # main
 # ---------------------------------------------------------------------------
 
+
+REVIEW_FAILURE_PHRASE = "Failed to review PR"
+
+
+def find_review_failure(comments: list[dict], since: str = "") -> str | None:
+    """Return the created_at of the newest fresh pr-agent failure comment.
+
+    pr-agent catches model errors itself, posts an issue comment starting
+    with "Failed to review PR" and exits 0. Without this check a failed
+    model call ends as a green run (silent degradation, hard rule 2).
+    Only github-actions[bot] comments newer than `since` count, so a human
+    quoting the phrase can never trigger the fail-safe.
+    """
+    newest = None
+    for comment in comments or []:
+        if (comment.get("user") or {}).get("login") != "github-actions[bot]":
+            continue
+        if REVIEW_FAILURE_PHRASE not in (comment.get("body") or ""):
+            continue
+        created = comment.get("created_at") or ""
+        if since and created < since:
+            continue
+        if newest is None or created > newest:
+            newest = created
+    return newest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", required=True)
@@ -556,6 +583,7 @@ def main() -> int:
     body = ""
     had_fresh_body = False
     had_stale_comment = False
+    review_failure = None
     if args.review_json:
         try:
             review_data = load_review_json(args.review_json)
@@ -570,6 +598,7 @@ def main() -> int:
         # de markdown-body komt uit de issue-comment.
         try:
             comments_ = fetch_issue_comments(repo, args.pr_number, token)
+            review_failure = find_review_failure(comments_, args.since)
 
             def _pick(cands, key) -> str:
                 return max(cands, key=key).get("body") or ""
@@ -667,13 +696,17 @@ def main() -> int:
         not args.no_body
         and not review_data
         and not had_fresh_body
-        and had_stale_comment
+        and (had_stale_comment or review_failure is not None)
     ):
+        detail = (
+            f"pr-agent failure comment found at {review_failure}"
+            if review_failure is not None
+            else "there is an older review"
+        )
         print(
             "GEEN verse review deze run: geen review-JSON én geen verse "
-            "review-guide-comment ná --since (model-output leeg/afgekapt?), "
-            "maar er is wél een oudere review. Stale fallback NIET gepost — "
-            "job faalt (rode workflow).",
+            f"review-guide-comment ná --since (model-output leeg/afgekapt?), "
+            f"{detail}. Stale fallback NIET gepost — job faalt (rode workflow).",
             file=sys.stderr,
         )
         return 3
