@@ -347,7 +347,7 @@ jobs:
           # 49152 = 1,6× de zwaarste geslaagde call (30,5k out) en ≈650 s bij
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
-          config.max_output_tokens: "98304"  # must stay BELOW max_model_tokens (128000): the fork pre-flight rejects max_output_tokens >= window (PR #28 run 37215082622: -2072 -> no model call). 49152 was too tight (finish=length, empty content).
+          config.max_output_tokens: "98304"  # must stay BELOW the max_model_tokens window: the fork pre-flight rejects max_output_tokens >= window (PR #28 run 37215082622: -2072 -> no model call). 49152 was too tight (finish=length, empty content).
           # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
           # kiest de provider zelf max-effort (mandatory voor glm-5.3-flash)
           # → 26-31k reasoning op zware PR's. Met 32000 is het denken gebonden
@@ -360,7 +360,7 @@ jobs:
           # incl. capture_dispatch.py, terwijl het verdict "No major issues"
           # luidde. Context glm-5.3-flash = 1M → 128000 past ruim; tier-2
           # blijft bewust op 64000 (glm-5.2, second opinion).
-          config.max_model_tokens: "128000"
+          config.max_model_tokens: "512000"  # prompt budget (diff clipping) for the 1M-context model; 128000 excluded 26/30 files on PR #28 (coverage warning). Prompt + output stay far below the 1M context.
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
