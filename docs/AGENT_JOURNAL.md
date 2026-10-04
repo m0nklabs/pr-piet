@@ -446,3 +446,14 @@
   37215082622: exit 3 bij de pre-flight-reject). Eindresultaat: finish=stop,
   37.221/98.304 tokens, formele review CHANGES_REQUESTED met marker op
   regel 2. pr-piet main `817814d`/`128c385`/`0fe6aee`.
+
+- **Tier-2 budgetten gecorrigeerd (2026-10-04, operator-vraag "glm-5.3 op
+  131k?"):** `custom_model_max_tokens: 131072` voor tier-2 was een
+  configuratiefout — OpenRouter-metadata: `z-ai/glm-5.3-flash` heeft
+  context 1.048.576 en route-output-cap 943.717; 131.072 was de
+  ROUTE-OUTPUT-cap van augustus (runaway-scenario) die toen als
+  context-window genoteerd raakte. Nu: `custom_model_max_tokens: 1048576`,
+  `max_model_tokens: 512000` (gelijk aan tier-1, volle diff-dekking) en een
+  NIEUWE `max_output_tokens: 98304` (tier-2 had géén cap → glm kon bij een
+  runaway tot ~944k branden). pr-piet main `4001fb8`. /review2-verificatie
+  op een mega-PR volgt op verzoek.
