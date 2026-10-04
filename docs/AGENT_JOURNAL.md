@@ -502,6 +502,6 @@
   candy-gu id-comment (verdere onderdrukking via publish_output=false)
   is een rewiring nodig: propagate_tool_errors (rode run via exit-code, de
   fail-comment verdwijnt dan) + JSON-gebaseerde clean-detectie (de
-  guide-comment-gruik vervalt) + E2E. Notitie: de 18 lege m0nk111-reviews
+  guide-comment-grep vervalt) + E2E. Notitie: de 18 lege m0nk111-reviews
   op guardian PR #28 zijn NIET van pr-piet (eigen gpt-6.1-sol/bridge
   tooling; submitted reviews zijn niet deletebaar, alleen dismissable).
