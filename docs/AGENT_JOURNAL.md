@@ -469,3 +469,26 @@
   race-bevinding uit de partiële run verdween in de full run; die thread
   bekijkt de guardian-agent alsnog. Verdict-gradering klopte: COMMENTED,
   nooit APPROVE.
+
+- **Model-switch per operator-instructie (2026-10-04, `1b2f698`): tier-1 =
+  z-ai/glm-5.3-flash, tier-2 = z-ai/glm-5.3; beide input-budget 1M
+  (max_model_tokens + custom_model_max_tokens 1048576), output ongem
+  builtin (caps verwijderd → provider-max).** Live bewezen op guardian PR
+  #28: GLM-T1-OK (run 37219744417: 2m17s, prompt 151.501, completion
+  2.124, reasoning 2.351, finish=stop; clean → niets gepost per
+  operator-beleid) en GLM-T2-OK (run 37220309448: 13:24, prompt 151.501,
+  completion 48.186, formele review COMMENTED 0 blocking / 1 non-blocking
+  met marker op regel 2). glm-5.3-flash was ~14x zuiniger en 5x sneller
+  dan deepseek-v4.1-flash op dezelfde PR. Vangnetten blijven: ai_timeout
+  900s, rode-run fail-safe, en (nu écht op beide tiers) de reasoning-cap.
+- **CORRECTIE reasoning-cap-attributie (2026-10-04, `26823c4`):** de
+  eerdere attributie ("[config].reasoning_max_tokens is dode config; de
+  fork leest de cap uit [openrouter]") is omgekeerd: de fork past
+  `[openrouter]`-caps alléén toe op openrouter-geroute modellen; onze
+  `openai/`-prefix (harde regel 5) loopt via de openai/-compat-patch die
+  `config.reasoning_max_tokens` (env) leest. Hard bewijs: tier-2-run met
+  [openrouter]=32000 in de toml → geen "Applying reasoning budget"-regel
+  en 47.437 reasoning-tokens; tier-1 (env-key) → wél de logregel.
+  `[openrouter]`-sectie verwijderd uit de toml (dode config voor onze
+  routing); tier-2 env heeft de key nu ook. Volgende /review2 toont de
+  logregel als bevestiging.
