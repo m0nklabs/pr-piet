@@ -498,8 +498,7 @@
   progress-comment (de fork-code noemt hem letterlijk; hij staat de héle run
   zichtbaar en wordt pas in de finally verwijderd). Fix:
   `config.publish_output_progress: "false"` op beide tiers; de 👀-reactie op
-  het commando blijft. Voor de candy-uit was gekozen. Voor de
-  candy-gu id-comment (verdere onderdrukking via publish_output=false)
+  het commando blijft. De candy-guide-comment (verdere onderdrukking via publish_output=False)
   is een rewiring nodig: propagate_tool_errors (rode run via exit-code, de
   fail-comment verdwijnt dan) + JSON-gebaseerde clean-detectie (de
   guide-comment-grep vervalt) + E2E. Notitie: de 18 lege m0nk111-reviews
