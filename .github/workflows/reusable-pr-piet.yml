@@ -562,8 +562,9 @@ jobs:
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           config.model: ${{ inputs.model_tier2 }}
           config.fallback_models: "[]"
-          config.custom_model_max_tokens: "131072"
-          config.max_model_tokens: "64000"
+          config.custom_model_max_tokens: "1048576"  # glm-5.3-flash context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
+          config.max_model_tokens: "512000"  # same prompt budget as tier-1 (full diff coverage)
+          config.max_output_tokens: "98304"  # bound the August-style glm runaway (route default is ~944k)
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           config.repo_context_max_lines: "300"
