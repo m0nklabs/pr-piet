@@ -46,20 +46,20 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-03: deepseek-v4.1-flash (1M context, bare-name probe HTTP 200). Let op: de eerdere deepseek-v4-flash-0731-ramp (131k reasoning, null content) is nu afgedekt door config.reasoning_max_tokens + config.max_output_tokens."
+        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-04: z-ai/glm-5.3-flash (1M context per OpenRouter-metadata). Output: provider-max (geen cap); reasoning-cap via [openrouter] in de toml; een faal wordt rode run (harde regel 2)."
         required: false
         type: string
-        default: "openai/deepseek/deepseek-v4.1-flash"
+        default: "openai/z-ai/glm-5.3-flash"
       model_tier2:
         description: "Tier-2 second-opinion model — draait NIET automatisch (enable_tier2 default false); handmatig via een /review2-comment."
         required: false
         type: string
-        default: "openai/z-ai/glm-5.3-flash"
+        default: "openai/z-ai/glm-5.3"
       model_tier1_label:
-        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. deepseek-v4.1-flash). Puur cosmetisch: het echte model komt uit model_tier1."
+        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. glm-5.3-flash). Puur cosmetisch: het echte model komt uit model_tier1."
         required: false
         type: string
-        default: "deepseek-v4.1-flash"
+        default: "glm-5.3-flash"
       enable_tier2:
         description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
@@ -347,7 +347,6 @@ jobs:
           # 49152 = 1,6× de zwaarste geslaagde call (30,5k out) en ≈650 s bij
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
-          config.max_output_tokens: "98304"  # must stay BELOW the max_model_tokens window: the fork pre-flight rejects max_output_tokens >= window (PR #28 run 37215082622: -2072 -> no model call). 49152 was too tight (finish=length, empty content).
           # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
           # kiest de provider zelf max-effort (mandatory voor glm-5.3-flash)
           # → 26-31k reasoning op zware PR's. Met 32000 is het denken gebonden
@@ -360,7 +359,7 @@ jobs:
           # incl. capture_dispatch.py, terwijl het verdict "No major issues"
           # luidde. Context glm-5.3-flash = 1M → 128000 past ruim; tier-2
           # blijft bewust op 64000 (glm-5.2, second opinion).
-          config.max_model_tokens: "512000"  # prompt budget (diff clipping) for the 1M-context model; 128000 excluded 26/30 files on PR #28 (coverage warning). Prompt + output stay far below the 1M context.
+          config.max_model_tokens: "1048576"  # prompt budget = full 1M model context (operator 2026-10-04): diff clipping effectively off, full coverage. Output cap intentionally unset (provider max applies).
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
@@ -562,9 +561,8 @@ jobs:
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           config.model: ${{ inputs.model_tier2 }}
           config.fallback_models: "[]"
-          config.custom_model_max_tokens: "1048576"  # glm-5.3-flash context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
-          config.max_model_tokens: "512000"  # same prompt budget as tier-1 (full diff coverage)
-          config.max_output_tokens: "98304"  # bound the August-style glm runaway (route default is ~944k)
+          config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
+          config.max_model_tokens: "1048576"  # prompt budget = full 1M model context (operator 2026-10-04), aligned with tier-1
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           config.repo_context_max_lines: "300"
