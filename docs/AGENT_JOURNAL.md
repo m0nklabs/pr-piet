@@ -427,13 +427,22 @@
   + commits_range sinds de gereviewde head; nul "No previous review found".
   pr-piet main `209c63e` (pinnen terug naar fork@main), fork main
   `67d458d5`.
-- **Output-budget faal op mega-PR's gefixt (2026-10-04, guardian PR #28):
-  3× "Failed to review PR" met exact 49.152 completion tokens,
-  finish_reason=length, prompt slechts ~83k (gateway-capture).** De
-  output-cap 49152 was de begrenzer (input 128k en ai_timeout 900s niet);
-  verhoogd naar 131072 (provider-cap). Daarnaast: pr-agent vangt model-
-  fouten zelf af (post "Failed to review PR", exit 0) en de oude fail-safe
-  eiste een stale guide-comment die de sweep opruimt → stille groene run.
-  Nieuw: `find_review_failure` (alleen bot-comments ná `since`, zodat een
-  mens die de tekst citeert nooit vals positief geeft) → return 3 → rode
-  run. pr-piet main `817814d` + `209c63e`.
+- **Output-budget faal op mega-PR's gefixt (2026-10-04, guardian PR #28,
+  PR28-OK op run 37215743515): 3× "Failed to review PR" met exact 49.152
+  completion tokens, finish_reason=length, prompt ~83k (gateway-capture).**
+  Twee ontdekte knoppen: (1) de output-cap 49152 was de begrenzer (input en
+  timeout niet) → 98304; LET OP: max_output_tokens moet ONDER
+  config.max_model_tokens (128000) blijven — de fork pre-flight
+  (`token_budget.require_input_capacity`) reject deterministisch bij
+  ≥window (131072 gaf −2072, geen modelcall, exit 3). (2)
+  `config.reasoning_max_tokens` in de env was DODE config: de fork leest de
+  reasoning-budget uitsluitend uit `[openrouter]` (litellm_ai_handler:1892);
+  nu in `config/.pr_agent.toml` `[openrouter] reasoning_max_tokens = 32000`
+  → logregel "Applying reasoning budget … reasoning.max_tokens=32000"
+  actief. Daarnaast: pr-agent vangt model-fouten zelf af (post "Failed to
+  review PR", exit 0) en de oude fail-safe eiste een stale guide-comment
+  die de sweep opruimt → stille groene run. Nieuw: `find_review_failure`
+  (alleen bot-comments ná `since`) → return 3 → rode run; live bewezen (run
+  37215082622: exit 3 bij de pre-flight-reject). Eindresultaat: finish=stop,
+  37.221/98.304 tokens, formele review CHANGES_REQUESTED met marker op
+  regel 2. pr-piet main `817814d`/`128c385`/`0fe6aee`.
