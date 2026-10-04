@@ -347,7 +347,7 @@ jobs:
           # 49152 = 1,6× de zwaarste geslaagde call (30,5k out) en ≈650 s bij
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
-          config.max_output_tokens: "131072"  # provider cap (openrouter route); 49152 was too tight for 30-file reviews (PR #28: finish=length, empty content at exactly 49152 tokens)
+          config.max_output_tokens: "98304"  # must stay BELOW max_model_tokens (128000): the fork pre-flight rejects max_output_tokens >= window (PR #28 run 37215082622: -2072 -> no model call). 49152 was too tight (finish=length, empty content).
           # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
           # kiest de provider zelf max-effort (mandatory voor glm-5.3-flash)
           # → 26-31k reasoning op zware PR's. Met 32000 is het denken gebonden
