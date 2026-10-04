@@ -369,6 +369,14 @@ def render_review_body(
         meta_bits.append(counts)
 
     lines = [heading]
+    if identity:
+        # Marker DIRECT ná de heading: de identity-matcher van de fork kijkt
+        # alleen in de eerste 5 regels (comment_identity
+        # ._REVIEW_IDENTITY_HEADER_LINES) en pr-agent zelf zet zijn marker
+        # ook meteen onder de kop (add_comment_identity). Achteraan geplakt
+        # betekent: anker gemist zodra er bevindingen zijn (bewezen in E2E,
+        # pr-piet-test PR #22).
+        lines.append(identity)
     if meta_bits:
         lines += ["", " · ".join(meta_bits)]
 
@@ -394,11 +402,6 @@ def render_review_body(
             lines.append("")
     else:
         lines += ["", "No blocking issues were found in the changed files."]
-
-    if identity:
-        # Hidden marker zodat de pr-agent-fork (patch #6) deze formele review
-        # als incrementeel anker herkent.
-        lines += ["", identity]
 
     return "\n".join(lines).rstrip()
 

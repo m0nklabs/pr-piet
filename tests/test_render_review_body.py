@@ -104,6 +104,19 @@ class TestReviewIdentity(unittest.TestCase):
         self.assertIn("<!-- pr-agent:review:incremental -->", body)
         self.assertNotIn("<!-- pr-agent:review:full -->", body)
 
+    def test_identity_marker_is_within_first_five_lines(self):
+        """Regressietest (E2E pr-piet-test PR #22): de identity-matcher van de
+        fork kijkt alleen in de eerste 5 regels van de body. Stond de marker
+        achteraan (na de findings), dan werd het incrementele anker gemist en
+        draaide elke push een volledige review."""
+        for payload in (data(BLOCKING, NONBLOCKING), data(), data(NONBLOCKING)):
+            body = render_review_body(payload, HEAD, "<!-- pr-agent:review:full -->")
+            head_lines = body.splitlines()[:5]
+            self.assertTrue(
+                any("<!-- pr-agent:review:" in line for line in head_lines),
+                f"identity-marker niet in de eerste 5 regels: {head_lines}",
+            )
+
     def test_identity_helper_picks_incremental_only_for_incremental_body(self):
         from submit_review import (
             PR_REVIEW_IDENTITY_FULL,
