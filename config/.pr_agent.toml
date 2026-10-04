@@ -118,9 +118,3 @@ enable = true
 target_tools = ["pr_reviewer", "pr_description", "pr_code_suggestions"]
 max_artifact_size = 50000
 
-[openrouter]
-# DeepSeek v4.1 redeneert onbeperkt door op mega-PRs (guardian PR #28: 49k+
-# reasoning tokens, lege content bij de output-cap). De fork leest de
-# reasoning-budget uitsluitend uit DEZE sectie ([config].reasoning_max_tokens
-# is dode config); 32000 dwingt het model na ~32k tokens te antwoorden.
-reasoning_max_tokens = 32000

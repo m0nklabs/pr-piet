@@ -562,6 +562,7 @@ jobs:
           config.model: ${{ inputs.model_tier2 }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
+          config.reasoning_max_tokens: "32000"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")
           config.max_model_tokens: "1048576"  # prompt budget = full 1M model context (operator 2026-10-04), aligned with tier-1
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
