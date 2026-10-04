@@ -1,0 +1,21 @@
+== PART A poll started 2026-10-04T15:42:01Z ==
+run found: 37213942679
+2026-10-04T15:42:02Z run=37213942679 status=in_progress conclusion=pending
+2026-10-04T15:42:33Z run=37213942679 status=in_progress conclusion=pending
+2026-10-04T15:43:04Z run=37213942679 status=completed conclusion=success
+== run 37213942679 completed: conclusion=success ==
+job id=111470531144 name=pr-piet / Map PR context (tree-sitter) status=completed conclusion=success
+job id=111470598034 name=pr-piet / Review tier 1 (deepseek-v4.1-flash) status=completed conclusion=success
+job id=111470796615 name=pr-piet / Review tier 2 (second opinion) status=completed conclusion=skipped
+== reviews on PR #23 ==
+review id=5406930026 user=github-actions[bot] state=CHANGES_REQUESTED commit=1a9fdc7f145de4b5e00cf8865eb66c9ca5ddc006 submitted=2026-10-04T15:42:39Z
+== first 5 lines of the latest review body ==
+ 1: ## PR-Piet review — changes requested
+ 2: <!-- pr-agent:review:full -->
+ 3: 
+ 4: head `1a9fdc7f` · 1 blocking
+ 5: 
+MARKER-CHECK: '<!-- pr-agent:review:full -->' IS within first 5 lines of latest review body
+marker line number in review body: 2
+== bot issue comments (first line only) ==
+comment id=5981712078 :: <!-- pr-piet-status:v1 -->
