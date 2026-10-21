@@ -504,3 +504,22 @@
   guide-comment-grep vervalt) + E2E. Notitie: de 18 lege m0nk111-reviews
   op guardian PR #28 zijn NIET van pr-piet (eigen gpt-6.1-sol/bridge
   tooling; submitted reviews zijn niet deletebaar, alleen dismissable).
+
+- **Zakelijke template live (2026-10-21, `8b5040c`):** afronding van de
+  candy-onderdrukking. Geverifieerd in de fork-code (her-clone):
+  `github_action_output(data, 'review')` (pr_reviewer.py:1126) hangt
+  NIET aan `publish_output` - alleen aan `github_action_config.enable_output`
+  (staat al aan) -> de review-JSON blijft komen. De clean-path returnt
+  netjes (exit 0) met JSON al eerder geemitteerd; de fail-comment wordt
+  gesuppreesd door dezelfde gate, dus de rode run komt nu via
+  `config.propagate_tool_errors: "true"` (tool raise -> handle_request
+  False -> _action_status.failed -> SystemExit(1) - keten regel voor regel
+  nagekeken). Workflow: beide tiers `config.publish_output: "false"`
+  (doodt guide/persistent/progress/fail-comments; "Preparing review..."
+  staat op regel 320 achter dezelfde gate, dus de losse
+  publish_output_progress-regel is overbodig en verwijderd) +
+  propagate_tool_errors. `detect_review_clean.py` omgebouwd naar
+  JSON-modus (strict fail-closed; de step-output bevat de BINNENSTE
+  review-dict - zelfde tolerantie als submit_review.extract_key_issues).
+  48 tests groen (7 nieuwe detect-tests). E2E op pr-piet-test PR #24
+  (findings) + #25 (clean) via /review na het snapshot-race-venster.
