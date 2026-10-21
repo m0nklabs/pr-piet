@@ -353,7 +353,14 @@ jobs:
           # (~7 min totaal) en stroomt content daarna vrij. Bewezen effectief
           # via Z.AI: reasoning 8460 → 111/267 mét méér content.
           config.reasoning_max_tokens: "32000"
-          config.publish_output_progress: "false"  # suppress the transient "Preparing review..." progress comment (the command's eyes reaction already signals pickup)
+          # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
+          # "Preparing review...", "No major issues detected", fail-comment):
+          # de zakelijke output is uitsluitend onze formele review + status-thread.
+          # De review-JSON (enable_output) wordt onafhankelijk van deze gate geemitteerd.
+          config.publish_output: "false"
+          # model/gateway-faal -> tool raise -> action exit 1 -> RODE run
+          # (vervangt het fail-comment-signaal, dat nu niet meer bestaat).
+          config.propagate_tool_errors: "true"
           # Input-budget: 64k was deepseek-era. PR's van 33 bestanden/+4795
           # regels (~85-95k diff-tokens) werden DEELS gereviewd — guardian
           # PR #17: 10 bestanden overgeslagen ("Review coverage"-waarschuwing)
@@ -444,13 +451,13 @@ jobs:
         id: detect
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.cmdguard.outputs.command != 'review2'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_JSON: ${{ steps.pr-agent.outputs.review }}
         run: |
-          clean=$(python3 pr-piet/scripts/detect_review_clean.py \
-            "${{ inputs.pr_number }}" \
-            "PR Reviewer Guide" \
-            "${{ steps.ts.outputs.since }}")
+          clean="false"
+          if [ -n "${REVIEW_JSON}" ]; then
+            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review-detect.json
+            clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json /tmp/pr-agent-review-detect.json)
+          fi
           echo "tier1_clean=${clean}" >> "$GITHUB_OUTPUT"
           echo "tier1_clean=${clean}"
 
@@ -564,7 +571,14 @@ jobs:
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
           config.reasoning_max_tokens: "32000"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")
-          config.publish_output_progress: "false"  # suppress the transient "Preparing review..." progress comment (the command's eyes reaction already signals pickup)
+          # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
+          # "Preparing review...", "No major issues detected", fail-comment):
+          # de zakelijke output is uitsluitend onze formele review + status-thread.
+          # De review-JSON (enable_output) wordt onafhankelijk van deze gate geemitteerd.
+          config.publish_output: "false"
+          # model/gateway-faal -> tool raise -> action exit 1 -> RODE run
+          # (vervangt het fail-comment-signaal, dat nu niet meer bestaat).
+          config.propagate_tool_errors: "true"
           config.max_model_tokens: "1048576"  # prompt budget = full 1M model context (operator 2026-10-04), aligned with tier-1
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
@@ -627,13 +641,13 @@ jobs:
       - name: Detecteer tier-2 resultaat (clean of findings)
         id: detect
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_JSON: ${{ steps.pr-agent.outputs.review }}
         run: |
-          clean=$(python3 pr-piet/scripts/detect_review_clean.py \
-            "${{ inputs.pr_number }}" \
-            "PR Reviewer Guide" \
-            "${{ steps.ts.outputs.since }}")
+          clean="false"
+          if [ -n "${REVIEW_JSON}" ]; then
+            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review-detect.json
+            clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json /tmp/pr-agent-review-detect.json)
+          fi
           echo "tier2_clean=${clean}" >> "$GITHUB_OUTPUT"
           echo "tier2_clean=${clean}"
 
