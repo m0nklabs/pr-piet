@@ -317,10 +317,20 @@ jobs:
           # (config/models.allowed.yaml) is de beleidspoort voor harde regel 1
           # (alleen open-weights): een onbekend id faalt hier hard (exit 3 ->
           # rode run) in plaats van stil met een ander model te reviewen.
-          python3 pr-piet/scripts/parse_review_command.py \
+          set +e
+          output=$(python3 pr-piet/scripts/parse_review_command.py \
             --allowlist pr-piet/config/models.allowed.yaml \
             --default-model "${{ inputs.model_tier1 }}" \
-            --expect review
+            --expect review 2>&1)
+          rc=$?
+          printf '%s\n' "$output"
+          if [ "$rc" -ne 0 ]; then
+            # Reden bewaren zodat de status-thread straks zegt WAT er misging
+            # (een typefout in het model-id hoort geen kale "failed" te zijn).
+            reason=$(printf '%s\n' "$output" | grep -oE "model '[^']+' is not allowed" | head -1)
+            echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+            exit "$rc"
+          fi
 
       - name: Normaliseer commando (/review=<model> -> /review)
         id: event
@@ -328,10 +338,7 @@ jobs:
         run: |
           # pr-agent parset de comment zelf en kent de =-vorm niet; het model
           # gaat via config.model, de body wordt het kale commando.
-          python3 pr-piet/scripts/rewrite_event_command.py \
-            --command /review \
-            --out .pr_piet/event.json \
-            --container-out /github/workspace/.pr_piet/event.json
+          python3 pr-piet/scripts/rewrite_event_command.py --command /review
 
       - name: Start de statuscomment (⏳ review loopt)
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
@@ -360,9 +367,6 @@ jobs:
           artifact_path: .pr_piet/context.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Genormaliseerde event-payload (kale /review) wanneer de comment een
-          # model-override meedroeg; anders de originele payload.
-          GITHUB_EVENT_PATH: ${{ steps.event.outputs.event_path || github.event_path }}
           # Guardian gateway (OpenAI-compatibel). Key = org-secret.
           OPENAI_KEY: ${{ secrets.GUARDIAN_API_KEY }}
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
@@ -548,13 +552,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          REASON: ${{ steps.model.outputs.reason }}
         run: |
           # Een gefaalde run mag de persistente thread niet in
           # "review in progress" achterlaten (gezien bij de mislukte
           # /review2-E2E, pr-piet-test PR #19).
-          python3 pr-piet/scripts/upsert_status_comment.py \
-            --pr-number "${{ inputs.pr_number }}" \
-            --state failed || true
+          if [ -n "$REASON" ]; then
+            python3 pr-piet/scripts/upsert_status_comment.py \
+              --pr-number "${{ inputs.pr_number }}" \
+              --state failed --detail "$REASON" || true
+          else
+            python3 pr-piet/scripts/upsert_status_comment.py \
+              --pr-number "${{ inputs.pr_number }}" \
+              --state failed || true
+          fi
 
 # ---------------------------------------------------------------------------
 # Job 3: review tier 2 (GLM second opinion) — alleen bij schone tier 1
@@ -598,19 +609,24 @@ jobs:
           # Zelfde allowlist-poort als tier 1 (harde regel 1: alleen
           # open-weights). --expect review2 houdt de tiers gescheiden: een
           # /review=<model> beïnvloedt de second opinion niet.
-          python3 pr-piet/scripts/parse_review_command.py \
+          set +e
+          output=$(python3 pr-piet/scripts/parse_review_command.py \
             --allowlist pr-piet/config/models.allowed.yaml \
             --default-model "${{ inputs.model_tier2 }}" \
-            --expect review2
+            --expect review2 2>&1)
+          rc=$?
+          printf '%s\n' "$output"
+          if [ "$rc" -ne 0 ]; then
+            reason=$(printf '%s\n' "$output" | grep -oE "model '[^']+' is not allowed" | head -1)
+            echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+            exit "$rc"
+          fi
 
       - name: Normaliseer commando (/review2=<model> -> /review)
         id: event
         if: steps.model.outputs.command == 'review2'
         run: |
-          python3 pr-piet/scripts/rewrite_event_command.py \
-            --command /review \
-            --out .pr_piet/event.json \
-            --container-out /github/workspace/.pr_piet/event.json
+          python3 pr-piet/scripts/rewrite_event_command.py --command /review
 
       - name: PR Agent (tier 2 — second opinion)
         id: pr-agent
@@ -621,8 +637,6 @@ jobs:
           artifact_path: .pr_piet/context.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Genormaliseerde event-payload (kale /review) bij een model-override.
-          GITHUB_EVENT_PATH: ${{ steps.event.outputs.event_path || github.event_path }}
           OPENAI_KEY: ${{ secrets.GUARDIAN_API_KEY }}
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
@@ -752,10 +766,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          REASON: ${{ steps.model.outputs.reason }}
         run: |
           # Een gefaalde run mag de persistente thread niet in
           # "review in progress" achterlaten (gezien bij de mislukte
           # /review2-E2E, pr-piet-test PR #19).
-          python3 pr-piet/scripts/upsert_status_comment.py \
-            --pr-number "${{ inputs.pr_number }}" \
-            --state failed || true
+          if [ -n "$REASON" ]; then
+            python3 pr-piet/scripts/upsert_status_comment.py \
+              --pr-number "${{ inputs.pr_number }}" \
+              --state failed --detail "$REASON" || true
+          else
+            python3 pr-piet/scripts/upsert_status_comment.py \
+              --pr-number "${{ inputs.pr_number }}" \
+              --state failed || true
+          fi
