@@ -301,13 +301,16 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
      toevoegen = één regel in dat bestand. Bron van de ids:
      `guardian-llmprovider-gateway/data/modelfetch.txt` (route-prefixen
      `openrouter/`, `ai-kvm2-local/`, `nvidia/` worden genormaliseerd).
-  2. **Payload-rewrite.** pr-agent parset de comment zelf en splitst alleen op
-     whitespace, dus `/review=x` is voor hem een onbekend commando. De stap
-     "Normaliseer commando" herschrijft daarom `.comment.body` naar kaal
-     `/review` in een kopie van de event-payload en zet `GITHUB_EVENT_PATH`
-     naar het **container-pad** (`/github/workspace/.pr_piet/event.json`) —
-     het model zelf gaat via `config.model` env. Zonder die rewrite faalt de
-     action met "Unknown command".
+  2. **Fork-patch voor de `=`-vorm.** pr-agent splitst het eerste token niet op
+     `=`, dus `/review=x` werd `Unknown command: review=z-ai/glm-5.3`. De fork
+     (`m0nklabs/pr-agent`, commit `7117128f`) stript de waarde in
+     `_run_command` zodat het kale `/review` overblijft; het model zelf komt
+     NOOIT uit de comment-tekst maar uit de gevalideerde `config.model` env.
+     **Waarom geen payload-rewrite:** actions/runner hermaterialiseert
+     `event.json` vóór élke action-step
+     (`ExecutionContext.WriteWebhookPayload`), en `GITHUB_EVENT_PATH` is een
+     gereserveerde runner-variabele die een step-`env:` niet kan overschrijven.
+     Beide routes zijn op 2026-10-25 gemeten en gefaald (zie journal).
   Zichtbaarheid: de check-naam blijft de geconfigureerde label-input (job-namen
   worden vóór de stappen geëvalueerd en kunnen geen step-output lezen), dus het
   échte model staat in de review-body (`head \`abc\` · model \`z-ai/glm-5.3\``),

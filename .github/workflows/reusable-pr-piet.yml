@@ -332,14 +332,6 @@ jobs:
             exit "$rc"
           fi
 
-      - name: Normaliseer commando (/review=<model> -> /review)
-        id: event
-        if: steps.model.outputs.command == 'review'
-        run: |
-          # pr-agent parset de comment zelf en kent de =-vorm niet; het model
-          # gaat via config.model, de body wordt het kale commando.
-          python3 pr-piet/scripts/rewrite_event_command.py --command /review
-
       - name: Start de statuscomment (⏳ review loopt)
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         env:
@@ -621,12 +613,6 @@ jobs:
             echo "reason=${reason}" >> "$GITHUB_OUTPUT"
             exit "$rc"
           fi
-
-      - name: Normaliseer commando (/review2=<model> -> /review)
-        id: event
-        if: steps.model.outputs.command == 'review2'
-        run: |
-          python3 pr-piet/scripts/rewrite_event_command.py --command /review
 
       - name: PR Agent (tier 2 — second opinion)
         id: pr-agent
