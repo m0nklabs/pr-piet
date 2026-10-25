@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from upsert_status_comment import (  # noqa: E402
     STATUS_MARKER,
     find_status_comment,
+    status_comments,
     render_status,
 )
 
@@ -74,7 +75,14 @@ class TestFindStatusComment(unittest.TestCase):
         comments = [{"id": 1, "body": "PR Reviewer Guide", "updated_at": "x"}]
         self.assertIsNone(find_status_comment(comments))
 
-    def test_newest_marker_wins(self):
+    def test_oldest_marker_wins(self):
+        """De canonieke thread is de OUDSTE comment met onze marker.
+
+        Regressie voor caretaker-llamacpp PR #16 (2026-10-25): met
+        "nieuwste-op-updated_at" wezen twee parallelle runs (auto-review +
+        /review) elk naar de comment van de ándere run, waardoor de eigen
+        comment voor eeuwig op "review in progress" bleef staan.
+        """
         comments = [
             {"id": 1, "body": STATUS_MARKER + " oud", "updated_at": "2026-01-01"},
             {"id": 2, "body": STATUS_MARKER + " nieuw", "updated_at": "2026-02-01"},
@@ -82,7 +90,28 @@ class TestFindStatusComment(unittest.TestCase):
         ]
         found = find_status_comment(comments)
         self.assertIsNotNone(found)
-        self.assertEqual(found["id"], 2)
+        self.assertEqual(found["id"], 1)
+
+    def test_choice_is_stable_regardless_of_update_order(self):
+        """De keuze mag niet afhangen van wie het laatst schreef."""
+        first = [
+            {"id": 10, "body": STATUS_MARKER + " a", "updated_at": "2026-01-01"},
+            {"id": 20, "body": STATUS_MARKER + " b", "updated_at": "2026-05-01"},
+        ]
+        second = [
+            {"id": 10, "body": STATUS_MARKER + " a", "updated_at": "2026-09-01"},
+            {"id": 20, "body": STATUS_MARKER + " b", "updated_at": "2026-05-01"},
+        ]
+        self.assertEqual(find_status_comment(first)["id"], 10)
+        self.assertEqual(find_status_comment(second)["id"], 10)
+
+    def test_status_comments_sorted_oldest_first(self):
+        comments = [
+            {"id": 30, "body": STATUS_MARKER + " c"},
+            {"id": 10, "body": STATUS_MARKER + " a"},
+            {"id": 20, "body": "geen marker"},
+        ]
+        self.assertEqual([c["id"] for c in status_comments(comments)], [10, 30])
 
 
 if __name__ == "__main__":

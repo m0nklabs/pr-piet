@@ -68,12 +68,41 @@ def render_status(state: str, head: str, detail: str = "") -> str:
     )
 
 
-def find_status_comment(comments: list) -> dict | None:
-    """Zoek de bestaande statuscomment (nieuwste met onze marker)."""
+def status_comments(comments: list) -> list[dict]:
+    """Alle comments met onze marker, oudste eerst (id is monotoon)."""
     matches = [c for c in comments if STATUS_MARKER in (c.get("body") or "")]
-    if not matches:
-        return None
-    return max(matches, key=lambda c: c.get("updated_at") or "")
+    return sorted(matches, key=lambda c: c.get("id") or 0)
+
+
+def find_status_comment(comments: list) -> dict | None:
+    """De canonieke statuscomment: de OUDSTE met onze marker.
+
+    Bewust niet de nieuwste-op-updated_at (tot 2026-10-25): bij twee
+    parallelle runs (auto-review + /review in verschillende
+    concurrency-groepen) wees die elk naar de comment van de ándere run,
+    waardoor de eigen comment voor eeuwig op "review in progress" bleef
+    staan. De oudste is stabiel en deterministisch voor beide runs.
+    """
+    matches = status_comments(comments)
+    return matches[0] if matches else None
+
+
+def delete_duplicate_status_comments(
+    repo: str, pr_number: str, token: str, keep_id: int
+) -> list[int]:
+    """Verwijder extra statuscomments (onze eigen) — één thread per PR."""
+    deleted: list[int] = []
+    for comment in status_comments(fetch_comments(repo, pr_number, token)):
+        if comment.get("id") == keep_id:
+            continue
+        try:
+            _request(
+                "DELETE", f"{API}/repos/{repo}/issues/comments/{comment['id']}", token
+            )
+            deleted.append(comment["id"])
+        except Exception as exc:  # noqa: BLE001 - opruimen is niet fataal
+            print(f"kon duplicaat {comment.get('id')} niet verwijderen: {exc}", file=sys.stderr)
+    return deleted
 
 
 def _request(method: str, url: str, token: str, payload: dict | None = None) -> dict:
@@ -141,13 +170,14 @@ def main() -> int:
     try:
         existing = find_status_comment(fetch_comments(repo, args.pr_number, token))
         if existing:
+            keep_id = existing["id"]
             _request(
                 "PATCH",
-                f"{API}/repos/{repo}/issues/comments/{existing['id']}",
+                f"{API}/repos/{repo}/issues/comments/{keep_id}",
                 token,
                 {"body": body},
             )
-            print(f"updated {existing['id']}")
+            print(f"updated {keep_id}")
         else:
             created = _request(
                 "POST",
@@ -155,7 +185,14 @@ def main() -> int:
                 token,
                 {"body": body},
             )
-            print(f"posted {created.get('id')}")
+            keep_id = created.get("id")
+            print(f"posted {keep_id}")
+        # Zelfherstellend: bij een race kunnen twee runs elk een comment
+        # hebben aangemaakt. Houd de canonieke (oudste) en ruim de rest op,
+        # zodat er weer precies één statuscomment overblijft.
+        deleted = delete_duplicate_status_comments(repo, args.pr_number, token, keep_id)
+        if deleted:
+            print(f"duplicaten opgeruimd: {deleted}")
     except Exception as exc:  # noqa: BLE001 - statuscomment is niet fataal
         print(f"kon statuscomment niet bijwerken: {exc}", file=sys.stderr)
         return 0

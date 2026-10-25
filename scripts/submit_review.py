@@ -42,6 +42,7 @@ Uitvoer op stdout:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -107,15 +108,18 @@ def _review_marker(commit_sha: str) -> str:
     return f"<!-- pr-piet-review:v1 head={commit_sha} -->"
 
 
-def already_reviewed(repo: str, pr_number: str, token: str, commit_sha: str) -> bool:
-    """Check of er al een formele review van github-actions[bot] op deze head staat.
+def find_reviews_for_head(
+    repo: str, pr_number: str, token: str, commit_sha: str
+) -> list[dict]:
+    """Formele bot-reviews die al op deze head staan.
 
     Gebruikt de marker in de review-body. Als de marker ontbreekt (oudere
-    reviews), vallen we terug op: zelfde commit_id + zelfde event + body die
-    de "PR Reviewer Guide"-heading bevat.
+    reviews), vallen we terug op: zelfde commit_id + body die de
+    "PR Reviewer Guide"-heading bevat.
     """
     if not commit_sha:
-        return False
+        return []
+    found: list[dict] = []
     marker = _review_marker(commit_sha)
     page = 1
     while True:
@@ -127,17 +131,30 @@ def already_reviewed(repo: str, pr_number: str, token: str, commit_sha: str) -> 
             if not (rv.get("user") or {}).get("login", "").endswith("[bot]"):
                 continue
             body = rv.get("body") or ""
-            if marker in body:
-                return True
-            if (
-                (rv.get("commit_id") or "") == commit_sha
-                and ("PR Reviewer Guide" in body or "PR Reviewer Guide" in (rv.get("state") or ""))
-            ):
-                return True
+            if marker in body or (rv.get("commit_id") or "") == commit_sha:
+                found.append(rv)
         if len(reviews) < 100:
             break
         page += 1
-    return False
+    return found
+
+
+def already_reviewed(repo: str, pr_number: str, token: str, commit_sha: str) -> bool:
+    """True als er al een formele bot-review op deze head staat (elke leeftijd)."""
+    return bool(find_reviews_for_head(repo, pr_number, token, commit_sha))
+
+
+def minutes_since(timestamp: str) -> float | None:
+    """Leeftijd in minuten van een ISO-8601 API-timestamp (None als onbruikbaar)."""
+    if not timestamp:
+        return None
+    try:
+        submitted = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if submitted.tzinfo is None:
+        submitted = submitted.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - submitted).total_seconds() / 60.0
 
 
 def get_added_lines_per_file(repo: str, pr_number: str, token: str) -> dict[str, set[int]]:
@@ -574,6 +591,13 @@ def main() -> int:
     parser.add_argument("--event", default="auto",
                         choices=["auto", "COMMENT", "REQUEST_CHANGES", "APPROVE"])
     parser.add_argument("--commit-sha", help="head commit-sha (default: via API)")
+    parser.add_argument(
+        "--dedupe-window-minutes",
+        type=float,
+        default=15.0,
+        help="sla een duplicaat-review over als dezelfde head al binnen dit "
+        "venster is gereviewed (0 = nooit dedupliceren)",
+    )
     parser.add_argument("--model", default="",
                         help="model dat deze review maakte (voor de meta-regel)")
     parser.add_argument("--no-body", action="store_true",
@@ -832,6 +856,31 @@ def main() -> int:
                 return 0
         except Exception as exc:  # noqa: BLE001
             print(f"kon dedup-check niet uitvoeren ({exc}); ga door", file=sys.stderr)
+
+    # 4b-bis. Dedupe bij een VERSE review-JSON, met tijdvenster.
+    #
+    # Aanleiding (2026-10-25, caretaker-llamacpp PR #16): een PR-opened
+    # auto-review en een /review-comment starten 1 s na elkaar in twee
+    # verschillende concurrency-groepen (de caller splitst de groep per
+    # event-name, zodat een /review de auto-review niet cancelt). Beide runs
+    # postten een identieke formele review op dezelfde head. Binnen het
+    # venster is een tweede review op dezelfde head pure ruis; buiten het
+    # venster blijft een bewuste her-review mogelijk.
+    if commit_sha and review_data is not None and args.dedupe_window_minutes > 0:
+        try:
+            for rv in find_reviews_for_head(repo, args.pr_number, token, commit_sha):
+                age = minutes_since(rv.get("submitted_at") or "")
+                if age is not None and age <= args.dedupe_window_minutes:
+                    print(
+                        f"(head {commit_sha[:8]} is {age:.1f} min geleden al "
+                        f"gereviewed in review {rv.get('id')} — duplicaat "
+                        f"overgeslagen; een tweede run op dezelfde head "
+                        f"voegt niets toe)",
+                        file=sys.stderr,
+                    )
+                    return 0
+        except Exception as exc:  # noqa: BLE001
+            print(f"kon dedupe-check niet uitvoeren ({exc}); ga door", file=sys.stderr)
 
     # 4c. Sobere eigen body (operator-wens 2026-10-03, caretaker PR #12):
     # de candy-look van pr-agent's "PR Reviewer Guide 🔍"-tabel (effort-
