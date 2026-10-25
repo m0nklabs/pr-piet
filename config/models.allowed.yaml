@@ -1,0 +1,51 @@
+# Allowed model overrides for `/review=<model>` and `/review2=<model>`.
+#
+# HARD RULE 1 (AGENTS.md): open-weights models only. This file IS the policy
+# gate: a model id that is not listed here is rejected before any model call.
+# Closed-weights ids (openai/*, google/gemini-*, github-copilot/*, poolside/*),
+# gateway presets (@preset/*), failover chains (failover/*), embeddings
+# (nomic/*) and scoring models (viescore2) are deliberately absent.
+#
+# Spelling: bare gateway model ids (the same id the gateway serves, without
+# the litellm `openai/` routing prefix). A route-prefixed spelling from the
+# gateway catalog (openrouter/..., ai-kvm2-local/..., nvidia/...) is accepted
+# and normalized to the bare id. Refresh source of truth:
+#   guardian-llmprovider-gateway/data/modelfetch.txt
+#
+# Adding a model = one line here (reviewed like any other policy change).
+
+models:
+  # Z.AI GLM — the pr-piet defaults.
+  - z-ai/glm-5.3-flash
+  - z-ai/glm-5.3
+  - z-ai/glm-5.2
+
+  # DeepSeek.
+  - deepseek/deepseek-v4.1-flash
+  - deepseek/deepseek-v4.1-flash-1017
+  - deepseek/deepseek-v4-flash-0731
+
+  # Other hosted open-weights.
+  - moonshotai/kimi-k3
+  - minimax/minimax-m3
+
+  # Qwen (hosted route + local pool).
+  - qwen/qwen3.8-27b
+  - qwen/qwen3.8-27b-instruct
+  - qwen/qwen3.8-flash-next
+  - qwen/qwen3.5-9b
+  - qwen/qwen3.5-9b-coder
+  - qwen/qwen3.5-9b-instruct
+  - qwen/qwen3.5-9b-reasoner
+
+  # Small local models.
+  - gemma/gemma-4-E4B-it-uncensored
+  - gemma/Huihui-gemma-4-26B-A4B-it-abliterated
+  - granite/granite-4.1-8b
+  - llama/llama3.2-3b
+  - phi/Phi-4-reasoning-plus
+
+  # NVIDIA Nemotron.
+  - nvidia/nemotron-3.5-lightning
+  - nvidia/nemotron-3.5-super-vl
+  - nvidia/nemotron-3-super-120b-a12b

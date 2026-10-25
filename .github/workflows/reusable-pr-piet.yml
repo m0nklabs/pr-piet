@@ -126,7 +126,7 @@ jobs:
           proceed=true
           if [ "$EVENT_NAME" = "issue_comment" ]; then
             if ! printf '%s' "$COMMENT_BODY" | grep -qiE \
-              '^[[:space:]]*/(review2|review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
+              '^[[:space:]]*/(review2?([[:space:]]|=|$)|(improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$))'; then
               proceed=false
               echo "::notice::Comment bevat geen pr-agent-commando — PR-Piet overgeslagen (zet het commando op een eigen regel, bv. '/review')"
             fi
@@ -223,14 +223,17 @@ jobs:
           command=""
           if [ "$EVENT_NAME" = "issue_comment" ]; then
             if printf '%s' "$COMMENT_BODY" | grep -qiE \
-              '^[[:space:]]*/review2([[:space:]]|$)'; then
+              '^[[:space:]]*/review2([[:space:]]|=|$)'; then
               # Handmatige second opinion (operator-besluit 2026-10-03):
               # tier 2 draait niet automatisch meer, maar mag op verzoek.
               # pr-agent kent /review2 niet; de tier-2-job herschrijft de
               # event-payload naar /review voordat de action start.
               command="review2"
             elif printf '%s' "$COMMENT_BODY" | grep -qiE \
-              '^[[:space:]]*/(review|improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
+              '^[[:space:]]*/review([[:space:]]|=|$)'; then
+              command="agent"
+            elif printf '%s' "$COMMENT_BODY" | grep -qiE \
+              '^[[:space:]]*/(improve|describe|ask|help|update_changelog|add_docs|generate_labels|find_similar_component|feedback)([[:space:]]|$)'; then
               command="agent"
             else
               proceed=false
@@ -304,6 +307,32 @@ jobs:
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
           ls -la .pr_piet/
 
+      - name: Model-override (/review=<model>)
+        id: model
+        if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          # /review=<model> kiest het model voor deze run. De allowlist
+          # (config/models.allowed.yaml) is de beleidspoort voor harde regel 1
+          # (alleen open-weights): een onbekend id faalt hier hard (exit 3 ->
+          # rode run) in plaats van stil met een ander model te reviewen.
+          python3 pr-piet/scripts/parse_review_command.py \
+            --allowlist pr-piet/config/models.allowed.yaml \
+            --default-model "${{ inputs.model_tier1 }}" \
+            --expect review
+
+      - name: Normaliseer commando (/review=<model> -> /review)
+        id: event
+        if: steps.model.outputs.command == 'review'
+        run: |
+          # pr-agent parset de comment zelf en kent de =-vorm niet; het model
+          # gaat via config.model, de body wordt het kale commando.
+          python3 pr-piet/scripts/rewrite_event_command.py \
+            --command /review \
+            --out .pr_piet/event.json \
+            --container-out /github/workspace/.pr_piet/event.json
+
       - name: Start de statuscomment (⏳ review loopt)
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         env:
@@ -316,7 +345,8 @@ jobs:
           # de eindbeoordeling volgt in de stap "Één eindbeoordeling per PR".
           python3 pr-piet/scripts/upsert_status_comment.py \
             --pr-number "${{ inputs.pr_number }}" \
-            --state running || true
+            --state running \
+            --detail "model \`${{ steps.model.outputs.model_label }}\`" || true
 
       - name: PR Agent (tier 1)
         id: pr-agent
@@ -330,6 +360,9 @@ jobs:
           artifact_path: .pr_piet/context.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Genormaliseerde event-payload (kale /review) wanneer de comment een
+          # model-override meedroeg; anders de originele payload.
+          GITHUB_EVENT_PATH: ${{ steps.event.outputs.event_path || github.event_path }}
           # Guardian gateway (OpenAI-compatibel). Key = org-secret.
           OPENAI_KEY: ${{ secrets.GUARDIAN_API_KEY }}
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
@@ -338,7 +371,7 @@ jobs:
           # runner-pad. (repo-local .pr_agent.toml + env overriden dit.)
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           # Modellen: open-weights, GEEN fallback.
-          config.model: ${{ inputs.model_tier1 }}
+          config.model: ${{ steps.model.outputs.model }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
           # Harde output-begrenzing (fork-knop, ONLY tier-1): pr-agent stuurt
@@ -426,6 +459,7 @@ jobs:
             --pr-number "${{ inputs.pr_number }}" \
             --heading "PR Reviewer Guide" \
             --since "${{ steps.ts.outputs.since }}" \
+            --model "${{ steps.model.outputs.model_label }}" \
             ${json_arg} \
             > /tmp/submit_review.out 2> /tmp/submit_review.err
           rc=$?
@@ -500,13 +534,14 @@ jobs:
             echo "## PR-Piet review — ${state}"
             echo
             echo "- PR: #${{ inputs.pr_number }}"
-            echo "- Tier-1 model: \`${{ inputs.model_tier1 }}\`"
+            echo "- Tier-1 model: \`${{ steps.model.outputs.model }}\`"
             echo "- pr-agent sporen opgeruimd: ${deleted}"
           } >> "$GITHUB_STEP_SUMMARY"
 
           python3 pr-piet/scripts/upsert_status_comment.py \
             --pr-number "${{ inputs.pr_number }}" \
-            --state "$state" || true
+            --state "$state" \
+            --detail "model \`${{ steps.model.outputs.model_label }}\`" || true
 
       - name: Statuscomment op 'failed' bij een gefaalde run
         if: failure()
@@ -555,6 +590,28 @@ jobs:
         run: |
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
 
+      - name: Model-override (/review2=<model>)
+        id: model
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          # Zelfde allowlist-poort als tier 1 (harde regel 1: alleen
+          # open-weights). --expect review2 houdt de tiers gescheiden: een
+          # /review=<model> beïnvloedt de second opinion niet.
+          python3 pr-piet/scripts/parse_review_command.py \
+            --allowlist pr-piet/config/models.allowed.yaml \
+            --default-model "${{ inputs.model_tier2 }}" \
+            --expect review2
+
+      - name: Normaliseer commando (/review2=<model> -> /review)
+        id: event
+        if: steps.model.outputs.command == 'review2'
+        run: |
+          python3 pr-piet/scripts/rewrite_event_command.py \
+            --command /review \
+            --out .pr_piet/event.json \
+            --container-out /github/workspace/.pr_piet/event.json
+
       - name: PR Agent (tier 2 — second opinion)
         id: pr-agent
 
@@ -564,10 +621,12 @@ jobs:
           artifact_path: .pr_piet/context.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Genormaliseerde event-payload (kale /review) bij een model-override.
+          GITHUB_EVENT_PATH: ${{ steps.event.outputs.event_path || github.event_path }}
           OPENAI_KEY: ${{ secrets.GUARDIAN_API_KEY }}
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
-          config.model: ${{ inputs.model_tier2 }}
+          config.model: ${{ steps.model.outputs.model }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
           config.reasoning_max_tokens: "32000"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")
@@ -623,6 +682,7 @@ jobs:
             --pr-number "${{ inputs.pr_number }}" \
             --heading "PR Reviewer Guide" \
             --since "${{ steps.ts.outputs.since }}" \
+            --model "${{ steps.model.outputs.model_label }}" \
             ${json_arg} \
             > /tmp/submit_review.out 2> /tmp/submit_review.err
           rc=$?
@@ -678,13 +738,14 @@ jobs:
             echo "## PR-Piet tier-2 review — ${state}"
             echo
             echo "- PR: #${{ inputs.pr_number }}"
-            echo "- Tier-2 model: \`${{ inputs.model_tier2 }}\`"
+            echo "- Tier-2 model: \`${{ steps.model.outputs.model }}\`"
             echo "- pr-agent sporen opgeruimd: ${deleted}"
           } >> "$GITHUB_STEP_SUMMARY"
 
           python3 pr-piet/scripts/upsert_status_comment.py \
             --pr-number "${{ inputs.pr_number }}" \
-            --state "$state" || true
+            --state "$state" \
+            --detail "model \`${{ steps.model.outputs.model_label }}\`" || true
 
       - name: Statuscomment op 'failed' bij een gefaalde run
         if: failure()

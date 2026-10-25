@@ -338,6 +338,7 @@ def render_review_body(
     review_data: dict | None,
     commit_sha: str = "",
     identity: str = PR_REVIEW_IDENTITY_FULL,
+    model_label: str = "",
 ) -> str:
     """Zakelijke review-body uit de review-JSON (operator-wens 2026-10-03).
 
@@ -362,6 +363,11 @@ def render_review_body(
     meta_bits = []
     if commit_sha:
         meta_bits.append(f"head `{commit_sha[:8]}`")
+    if model_label:
+        # Which model actually produced this review: with /review=<model> the
+        # check name still shows the configured label, so the body is the
+        # authoritative record.
+        meta_bits.append(f"model `{model_label}`")
     if issues:
         counts = f"{len(blocking)} blocking"
         if nonblocking:
@@ -568,6 +574,8 @@ def main() -> int:
     parser.add_argument("--event", default="auto",
                         choices=["auto", "COMMENT", "REQUEST_CHANGES", "APPROVE"])
     parser.add_argument("--commit-sha", help="head commit-sha (default: via API)")
+    parser.add_argument("--model", default="",
+                        help="model dat deze review maakte (voor de meta-regel)")
     parser.add_argument("--no-body", action="store_true",
                         help="post alleen comments[], geen review-body")
     args = parser.parse_args()
@@ -835,7 +843,9 @@ def main() -> int:
         # Identiteit uit de verse pr-agent-comment: een incrementele review
         # krijgt de incremental-marker, anders de full-marker (fork-patch #6
         # gebruikt die om het incrementele anker in formele reviews te vinden).
-        body = render_review_body(review_data, commit_sha, identity_for_body(body))
+        body = render_review_body(
+            review_data, commit_sha, identity_for_body(body), args.model
+        )
 
     # 4d. Marker in de review-body zodat latere runs de review herkennen.
     if body and commit_sha:
