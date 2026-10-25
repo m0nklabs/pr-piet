@@ -535,13 +535,20 @@
   route-prefixen (`openrouter/`, `ai-kvm2-local/`, `nvidia/`, `openai/`) en
   weigert onbekende ids met exit 3 -> rode run + `::error::` (geen stille
   terugval);
-  (3) `scripts/rewrite_event_command.py` herschrijft `.comment.body` naar
-  kaal `/review` in een payload-kopie, want pr-agent splitst alleen op
-  whitespace en zou `/review=x` als onbekend commando zien (bewezen in de
-  fork-code: `_split_command` -> `(action, _)` = letterlijk
-  `/review=z-ai/glm-5.3`); `GITHUB_EVENT_PATH` gaat naar het
-  CONTAINER-pad `/github/workspace/.pr_piet/event.json` (host-pad is in de
-  docker-action niet zichtbaar), het model gaat via `config.model`.
+  (3) **CORRECTIE (zelfde dag, na E2E):** de eerste opzet herschreef de
+  event-payload (`scripts/rewrite_event_command.py`) — dat kan per definitie
+  NIET: actions/runner hermaterialiseert `event.json` vóór élke action-step
+  (`ExecutionContext.WriteWebhookPayload`), en `GITHUB_EVENT_PATH` is een
+  gereserveerde runner-variabele die een step-`env:` niet overschrijft. Beide
+  routes zijn gemeten (run 40233040959: rewrite meldde `rewritten=true`, de
+  action antwoordde alsnog `Unknown command: review=z-ai/glm-5.3`). De fix zit
+  daarom in de FORK (`m0nklabs/pr-agent` `7117128f`): `_run_command` stript de
+  `=<waarde>` van het eerste token zodat kaal `/review` overblijft; het model
+  komt NOOIT uit de comment-tekst maar uit de gevalideerde `config.model`
+  env (anders omzeilt een comment de allowlist). Het rewrite-script + zijn
+  tests zijn verwijderd (anti-legacy). De fork documenteerde deze runner-les
+  al bij de `/review2`-patch van 2026-10-03 — ik had die noot moeten lezen
+  vóór ik begon.
   `--expect review|review2` houdt de tiers gescheiden.
   (4) Zichtbaarheid: het echte model in de review-body
   (`head · model · counts`), de status-thread (`--detail`) en de
