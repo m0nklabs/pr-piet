@@ -523,3 +523,37 @@
   review-dict - zelfde tolerantie als submit_review.extract_key_issues).
   48 tests groen (7 nieuwe detect-tests). E2E op pr-piet-test PR #24
   (findings) + #25 (clean) via /review na het snapshot-race-venster.
+
+- **Model per review: `/review=<model>` (2026-10-25, `5a9f9ac`).**
+  Operator-wens: "pr piet zou per /review=<modelid> moeten kunnen werken".
+  Bron van de ids: `guardian-llmprovider-gateway/data/modelfetch.txt` (276
+  entries over 10 route-prefixen). Ontwerp:
+  (1) `config/models.allowed.yaml` = beleidspoort voor harde regel 1
+  (alleen open-weights; closed-weights/presets/failover/embeddings bewust
+  weggelaten);
+  (2) `scripts/parse_review_command.py` parset de comment, normaliseert
+  route-prefixen (`openrouter/`, `ai-kvm2-local/`, `nvidia/`, `openai/`) en
+  weigert onbekende ids met exit 3 -> rode run + `::error::` (geen stille
+  terugval);
+  (3) `scripts/rewrite_event_command.py` herschrijft `.comment.body` naar
+  kaal `/review` in een payload-kopie, want pr-agent splitst alleen op
+  whitespace en zou `/review=x` als onbekend commando zien (bewezen in de
+  fork-code: `_split_command` -> `(action, _)` = letterlijk
+  `/review=z-ai/glm-5.3`); `GITHUB_EVENT_PATH` gaat naar het
+  CONTAINER-pad `/github/workspace/.pr_piet/event.json` (host-pad is in de
+  docker-action niet zichtbaar), het model gaat via `config.model`.
+  `--expect review|review2` houdt de tiers gescheiden.
+  (4) Zichtbaarheid: het echte model in de review-body
+  (`head · model · counts`), de status-thread (`--detail`) en de
+  run-summary; de check-naam blijft de label-input, want job-namen worden
+  vóór de stappen geëvalueerd.
+  62 tests groen (14 nieuwe parser-tests). E2E op pr-piet-test PR #26.
+- **deepseek-harness caller: startup_failure verklaard en gefixt
+  (2026-10-25, `47d1384` in deepseek-harness).** De caller die ik op
+  2026-10-24 installeerde, gaf `startup_failure` met 0 jobs. Oorzaak: de
+  reusable workflow declareert `secrets: GUARDIAN_API_KEY: required: true`,
+  en de caller gaf geen `secrets:`-blok mee — GitHub valideert dat vóór de
+  job-creatie, dus geen job, geen log. Alle bestaande callers hebben dat
+  blok wel. Fix: `secrets: GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}`.
+  Les: een caller zonder secrets-blok faalt onzichtbaar (geen annotation via
+  de REST API, alleen op de runpagina).

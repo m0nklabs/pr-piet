@@ -287,6 +287,33 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   `z-ai/glm-5.3`, `moonshotai/kimi-k3`. De modellen uit de oorspronkelijke
   spec (`deepseek-chat`, `qwen-2.5-coder-32b`, `deepseek-r1`) staan er NIET in.
 
+- **Model per review kiezen: `/review=<model>` (2026-10-25).** Een
+  `/review`- of `/review2`-comment mag het model voor die ENE run zetten:
+  `/review=z-ai/glm-5.3`, `/review2=moonshotai/kimi-k3`. Zonder `=` geldt
+  de geconfigureerde default (`model_tier1`/`model_tier2`). Twee mechanismen:
+  1. **Allowlist als beleidspoort (harde regel 1).**
+     `config/models.allowed.yaml` bevat de toegestane (open-weights)
+     gateway-ids; `scripts/parse_review_command.py` weigert al het andere met
+     exit 3 -> rode run + `::error::` (géén stille terugval op een ander
+     model). Closed-weights (`openai/*`, `google/gemini-*`,
+     `github-copilot/*`, `poolside/*`), presets (`@preset/*`),
+     failover-ketens en embeddings staan er bewust niet in. Een model
+     toevoegen = één regel in dat bestand. Bron van de ids:
+     `guardian-llmprovider-gateway/data/modelfetch.txt` (route-prefixen
+     `openrouter/`, `ai-kvm2-local/`, `nvidia/` worden genormaliseerd).
+  2. **Payload-rewrite.** pr-agent parset de comment zelf en splitst alleen op
+     whitespace, dus `/review=x` is voor hem een onbekend commando. De stap
+     "Normaliseer commando" herschrijft daarom `.comment.body` naar kaal
+     `/review` in een kopie van de event-payload en zet `GITHUB_EVENT_PATH`
+     naar het **container-pad** (`/github/workspace/.pr_piet/event.json`) —
+     het model zelf gaat via `config.model` env. Zonder die rewrite faalt de
+     action met "Unknown command".
+  Zichtbaarheid: de check-naam blijft de geconfigureerde label-input (job-namen
+  worden vóór de stappen geëvalueerd en kunnen geen step-output lezen), dus het
+  échte model staat in de review-body (`head \`abc\` · model \`z-ai/glm-5.3\``),
+  in de status-thread en in de run-summary. `--expect review|review2` houdt de
+  tiers gescheiden: een `/review=x` beïnvloedt de second opinion niet.
+
 ## Dynamische commit-identity (auteur/committer = LLM-modelnaam)
 
 Sinds 2026-08-27 is de git-identity op deze host niet meer automatisch `PR-Piet`.
