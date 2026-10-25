@@ -317,6 +317,32 @@ aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
   in de status-thread en in de run-summary. `--expect review|review2` houdt de
   tiers gescheiden: een `/review=x` beïnvloedt de second opinion niet.
 
+- **Dubbele reviews/status-threads door parallelle runs (2026-10-25, caretaker
+  PR #16).** Een `pull_request`-auto-review en een `/review`-comment starten
+  ~1 s na elkaar. De caller zet `${{ github.event_name }}` in de
+  concurrency-groep (bewust, sinds 2026-08-30, zodat een `/review` de
+  auto-review niet cancelt) → twee groepen → **beide runs lopen parallel en
+  posten allebei**. Symptoom bij de operator: "4 antwoorden op 1 /review"
+  (2 formele reviews + 2 statuscomments). Twee fixes in de scripts, beide
+  onafhankelijk van de caller:
+  1. **Tijdvenster-dedupe in `submit_review.py`** (`--dedupe-window-minutes`,
+     default 15): staat er al een bot-review op dezelfde head binnen het
+     venster, dan slaat de tweede run het posten over. Buiten het venster
+     blijft een bewuste her-review mogelijk; 0 = nooit dedupliceren.
+  2. **Eén canonieke statuscomment in `upsert_status_comment.py`**: de
+     canonieke thread is de **oudste** marker-comment (op `id`, monotoon) —
+     niet de nieuwste-op-`updated_at`, want dan wezen twee runs elk naar de
+     comment van de ándere run en bleef de eigen comment eeuwig op
+     "review in progress" staan. Na de update worden extra marker-comments
+     (onze eigen) verwijderd, dus één thread per PR.
+  E2E: pr-piet-test PR #27 — auto-review + `/review` op dezelfde head gaf
+  1 review en 1 statuscomment (log: "head b3f0c191 is 1.6 min geleden al
+  gereviewed ... duplicaat overgeslagen"). Op caretaker #16 is de
+  achtergebleven orphan-thread opgeruimd (dup verwijderd).
+  **Caller-alternatief** (niet toegepast, raakt 49 repos): `cancel-in-progress:
+  false` met één gedeelde groep serialiseert de runs in plaats van ze parallel
+  te laten lopen.
+
 ## Dynamische commit-identity (auteur/committer = LLM-modelnaam)
 
 Sinds 2026-08-27 is de git-identity op deze host niet meer automatisch `PR-Piet`.

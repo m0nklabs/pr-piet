@@ -564,3 +564,24 @@
   blok wel. Fix: `secrets: GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}`.
   Les: een caller zonder secrets-blok faalt onzichtbaar (geen annotation via
   de REST API, alleen op de runpagina).
+
+- **Duplicaat-reviews + orphan-status-thread gediagnosticeerd en gefixt
+  (2026-10-25, `242c25e`; aanleiding: operator-vraag "waarom staan hier 4
+  antwoorden ipv 1, op 1 /review?" bij caretaker-llamacpp PR #16).**
+  Feiten uit de API: 1 menselijke `/review`-comment (22:29:10), daarna TWEE
+  runs — `pull_request` 40240410945 (22:29:12) en `issue_comment` 40240411424
+  (22:29:13) — beide `success`, beide postten een formele review (22:30:29 en
+  22:30:36) en een statuscomment (`posted 6404293968` / `posted 6404294004`).
+  Oorzaak: de caller zet `${{ github.event_name }}` in de concurrency-groep
+  (bewuste keuze 2026-08-30 om cancellatie van de auto-review te voorkomen) →
+  twee groepen → geen serialisatie. Tweede fout erbovenop:
+  `find_status_comment` koos de nieuwste-op-`updated_at`, dus run A's
+  eind-upsert landde op B's comment en A's eigen comment bleef permanent op
+  "review in progress" staan (`updated 6404294004` in A's log).
+  Fixes: (1) `submit_review.py --dedupe-window-minutes` (default 15) slaat een
+  review op dezelfde head binnen het venster over; (2) `upsert_status_comment.py`
+  kiest de OUDSTE marker-comment en verwijdert de overige (één thread per PR).
+  E2E pr-piet-test PR #27: auto-review + `/review` → 1 review, 1 comment,
+  logregel "head b3f0c191 is 1.6 min geleden al gereviewed ... duplicaat
+  overgeslagen". Caretaker #16 orphan opgeruimd (`duplicaten opgeruimd:
+  [6404294004]`). 69 tests groen.
