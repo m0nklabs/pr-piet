@@ -137,22 +137,6 @@ jobs:
           fi
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
 
-      - name: Bevestig ontvangst (👀 op de opdracht-comment)
-        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_ID: ${{ github.event.comment.id }}
-        run: |
-          # Vroegste mogelijke ontvangst op de opdracht-comment: de map-job
-          # heeft geen docker-action, dus de runner hoeft geen pr-agent-image
-          # te bouwen en de stap draait ~30 s eerder dan in review_tier1
-          # (waar GitHub de docker-build vooraan hoist). Zonder dit kreeg een
-          # commando dat tijdens queue/build werd gecancelled geen enkele
-          # reactie (oelala PR #211, 2026-10-26). De token zit alléén in deze
-          # stap-env, nooit bij repo_mapper.py (harde regel 4). GitHub
-          # dedupliceert per user per reactie: map + tier1 blijven één 👀.
-          python3 pr-piet/scripts/post_eyes_reaction.py
-
       - name: Checkout PR head
         if: steps.cmdguard.outputs.proceed == 'true'
         uses: actions/checkout@v4
@@ -167,6 +151,24 @@ jobs:
           rm -rf pr-piet
           git clone --depth 1 --branch "${{ inputs.pr_piet_ref }}" \
             "https://github.com/${{ inputs.pr_piet_repo }}.git" pr-piet
+      - name: Bevestig ontvangst (👀 op de opdracht-comment)
+        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          # Vroegste mogelijke ontvangst op de opdracht-comment: de map-job
+          # heeft geen docker-action, dus de runner hoeft geen pr-agent-image
+          # te bouwen en de stap draait ~30 s eerder dan in review_tier1
+          # (waar GitHub de docker-build vooraan hoist). Zonder dit kreeg een
+          # commando dat tijdens queue/build werd gecancelled geen enkele
+          # reactie (oelala PR #211, 2026-10-26). De token zit alléén in deze
+          # stap-env, nooit bij repo_mapper.py (harde regel 4). GitHub
+          # dedupliceert per user per reactie: map + tier1 blijven één 👀.
+          # ...is pas na deze clone beschikbaar. Cosmetisch: faalt de
+          # ontvangst, dan mag dat de run nooit rood maken.
+          python3 pr-piet/scripts/post_eyes_reaction.py || true
+
 
       - name: Python + tree-sitter
         if: steps.cmdguard.outputs.proceed == 'true'
