@@ -151,24 +151,7 @@ jobs:
           # reactie (oelala PR #211, 2026-10-26). De token zit alléén in deze
           # stap-env, nooit bij repo_mapper.py (harde regel 4). GitHub
           # dedupliceert per user per reactie: map + tier1 blijven één 👀.
-          python3 - <<'PYI'
-import json, os, urllib.request
-token = os.environ["GH_TOKEN"]
-repo = os.environ["GITHUB_REPOSITORY"]
-cid = os.environ["COMMENT_ID"]
-req = urllib.request.Request(
-    f"https://api.github.com/repos/{repo}/issues/comments/{cid}/reactions",
-    data=json.dumps({"content": "eyes"}).encode(),
-    headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-             "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"},
-    method="POST",
-)
-try:
-    with urllib.request.urlopen(req, timeout=15) as r:
-        print(f"eyes receipt: HTTP {r.status}")
-except Exception as exc:
-    print(f"::warning::eyes receipt failed: {exc}")
-PYI
+          python3 pr-piet/scripts/post_eyes_reaction.py
 
       - name: Checkout PR head
         if: steps.cmdguard.outputs.proceed == 'true'
@@ -294,24 +277,7 @@ PYI
           # enkele reactie (oelala PR #211, 2026-10-26). GitHub dedupliceert
           # per user per reactie, dus de dubbele post uit map+tier1 blijft
           # één 👀.
-          python3 - <<'PYI'
-import json, os, urllib.request
-token = os.environ["GH_TOKEN"]
-repo = os.environ["GITHUB_REPOSITORY"]
-cid = os.environ["COMMENT_ID"]
-req = urllib.request.Request(
-    f"https://api.github.com/repos/{repo}/issues/comments/{cid}/reactions",
-    data=json.dumps({"content": "eyes"}).encode(),
-    headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-             "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"},
-    method="POST",
-)
-try:
-    with urllib.request.urlopen(req, timeout=15) as r:
-        print(f"eyes receipt: HTTP {r.status}")
-except Exception as exc:
-    print(f"::warning::eyes receipt failed: {exc}")
-PYI
+          python3 pr-piet/scripts/post_eyes_reaction.py
 
       - name: Skip als PR al gesloten/gemerged is
         id: pr-state
@@ -662,24 +628,7 @@ PYI
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENT_ID: ${{ github.event.comment.id }}
         run: |
-          python3 - <<'PYI'
-import json, os, urllib.request
-token = os.environ["GH_TOKEN"]
-repo = os.environ["GITHUB_REPOSITORY"]
-cid = os.environ["COMMENT_ID"]
-req = urllib.request.Request(
-    f"https://api.github.com/repos/{repo}/issues/comments/{cid}/reactions",
-    data=json.dumps({"content": "eyes"}).encode(),
-    headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
-             "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28"},
-    method="POST",
-)
-try:
-    with urllib.request.urlopen(req, timeout=15) as r:
-        print(f"eyes receipt: HTTP {r.status}")
-except Exception as exc:
-    print(f"::warning::eyes receipt failed: {exc}")
-PYI
+          python3 pr-piet/scripts/post_eyes_reaction.py
 
       - name: Start-tijdstip (voor de verse-comment-detectie)
         id: ts
