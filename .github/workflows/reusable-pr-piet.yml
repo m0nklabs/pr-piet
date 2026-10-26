@@ -109,12 +109,14 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event.issue.pull_request }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 20
-    # issues: write is uitsluitend voor de 👀-ontvangst-stap hieronder; de
-    # token zit alleen in DIE stap-env, nooit bij repo_mapper.py (harde
-    # regel 4: untrusted PR-code krijgt geen schrijfrechten te zien).
+    # issues + reactions: write zijn uitsluitend voor de 👀-ontvangst-stap
+    # hieronder; de token zit alleen in DIE stap-env, nooit bij
+    # repo_mapper.py (harde regel 4: untrusted PR-code krijgt geen
+    # schrijfrechten te zien).
     permissions:
       contents: read
       issues: write
+      reactions: write
     steps:
       - name: Commando-guard (issue_comment)
         id: cmdguard
@@ -221,6 +223,7 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
+      reactions: write
     outputs:
       tier1_clean: ${{ steps.detect.outputs.tier1_clean }}
       pending_cr: ${{ steps.pending-cr.outputs.pending_cr }}
@@ -617,6 +620,7 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
+      reactions: write
     steps:
       - name: Clone pr-piet (scripts + config)
         run: |
