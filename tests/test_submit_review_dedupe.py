@@ -53,3 +53,30 @@ class TestReviewMarker(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestModelInBody(unittest.TestCase):
+    """De dedupe mag alleen een écht duplicaat (zelfde model) overslaan."""
+
+    def test_reads_the_meta_line(self):
+        from submit_review import model_in_body
+
+        body = "## PR-Piet review\n\nhead `bede5447` · model `z-ai/glm-5.3` · 1 blocking\n"
+        self.assertEqual(model_in_body(body), "z-ai/glm-5.3")
+
+    def test_missing_model_is_empty(self):
+        from submit_review import model_in_body
+
+        self.assertEqual(model_in_body("## PR-Piet review\n\nhead `abc` · 0 blocking"), "")
+        self.assertEqual(model_in_body(""), "")
+
+    def test_different_models_are_not_duplicates(self):
+        from submit_review import model_in_body
+
+        previous = "head `abc` · model `deepseek/deepseek-v4.1-flash-1017` · 1 blocking"
+        self.assertNotEqual(
+            model_in_body(previous), "github-copilot/openai/gpt-6.1-sol"
+        )
+        self.assertEqual(
+            model_in_body(previous), "deepseek/deepseek-v4.1-flash-1017"
+        )

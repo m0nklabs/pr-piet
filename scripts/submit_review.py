@@ -144,6 +144,12 @@ def already_reviewed(repo: str, pr_number: str, token: str, commit_sha: str) -> 
     return bool(find_reviews_for_head(repo, pr_number, token, commit_sha))
 
 
+def model_in_body(body: str) -> str:
+    """The model recorded in a review body ("head `abc` · model `x`"), or ""."""
+    match = re.search(r"model `([^`]+)`", body or "")
+    return match.group(1) if match else ""
+
+
 def minutes_since(timestamp: str) -> float | None:
     """Leeftijd in minuten van een ISO-8601 API-timestamp (None als onbruikbaar)."""
     if not timestamp:
@@ -870,7 +876,11 @@ def main() -> int:
         try:
             for rv in find_reviews_for_head(repo, args.pr_number, token, commit_sha):
                 age = minutes_since(rv.get("submitted_at") or "")
-                if age is not None and age <= args.dedupe_window_minutes:
+                # Alleen een ECHT duplicaat overslaan: een review van een ander
+                # model op dezelfde head is een bewuste second opinion en moet
+                # gewoon kunnen (operator wisselt van model per commando).
+                same_model = model_in_body(rv.get("body") or "") == (args.model or "")
+                if same_model and age is not None and age <= args.dedupe_window_minutes:
                     print(
                         f"(head {commit_sha[:8]} is {age:.1f} min geleden al "
                         f"gereviewed in review {rv.get('id')} — duplicaat "
