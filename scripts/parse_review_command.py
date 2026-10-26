@@ -36,6 +36,7 @@ Outputs (GITHUB_OUTPUT when set, otherwise stdout as key=value lines):
     model        effective litellm model, e.g. openai/z-ai/glm-5.3
     model_label  display form, e.g. z-ai/glm-5.3
     override     true|false          a model override was requested
+    temperature  sampling temperature to use for the resolved model
 """
 
 from __future__ import annotations
@@ -158,6 +159,17 @@ def fetch_catalog(url: str, key: str, timeout: float = 10.0) -> list[str] | None
     return [entry.get("id", "") for entry in payload.get("data", []) if entry.get("id")]
 
 
+def temperature_for(model_id: str) -> str:
+    """Sampling temperature that the chosen route actually accepts.
+
+    The github-copilot bridge serves reasoning models that reject any
+    temperature other than 1 ("doesn't support temperature=0.2 while reasoning
+    is active", measured 2026-10-26 on gpt-6.1-sol). Every other route is fine
+    with the low temperature the reviewer relies on for consistent verdicts.
+    """
+    return "1" if model_id.startswith("github-copilot/") else "0.2"
+
+
 def route_rank(model_id: str) -> tuple[int, str]:
     for index, prefix in enumerate(ROUTE_PRIORITY):
         if model_id.startswith(prefix):
@@ -251,6 +263,7 @@ def main() -> int:
         "model": default_model,
         "model_label": default_label,
         "override": "false",
+        "temperature": temperature_for(default_label),
     }
 
     found = first_command(args.comment_body)
@@ -326,6 +339,7 @@ def main() -> int:
     base["model"] = f"openai/{canonical}"
     base["model_label"] = canonical
     base["override"] = "true"
+    base["temperature"] = temperature_for(canonical)
     emit(base)
     return 0
 

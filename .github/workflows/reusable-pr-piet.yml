@@ -385,6 +385,9 @@ jobs:
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           # Modellen: open-weights, GEEN fallback.
           config.model: ${{ steps.model.outputs.model }}
+          # Route-afhankelijk: de github-copilot-bridge weigert alles
+          # behalve temperature=1 zolang reasoning actief is.
+          config.temperature: ${{ steps.model.outputs.temperature }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
           # Harde output-begrenzing (fork-knop, ONLY tier-1): pr-agent stuurt
@@ -658,6 +661,9 @@ jobs:
           OPENAI.API_BASE: ${{ inputs.gateway_base_url }}
           PR_AGENT_EXTRA_CONFIG_URL: /github/workspace/.pr_piet/.pr_agent.toml
           config.model: ${{ steps.model.outputs.model }}
+          # Route-afhankelijk: de github-copilot-bridge weigert alles
+          # behalve temperature=1 zolang reasoning actief is.
+          config.temperature: ${{ steps.model.outputs.temperature }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
           config.reasoning_max_tokens: "32000"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")

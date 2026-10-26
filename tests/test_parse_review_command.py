@@ -278,3 +278,27 @@ def test_catalog_outage_fails_open_for_the_operator():
     assert rc == 0
     assert out["override"] == "true"
     assert "catalog unavailable" in err
+
+
+def test_copilot_route_forces_temperature_one():
+    server, url = catalog_server()
+    try:
+        _, out, _ = run_gated("/review=github-copilot/openai/gpt-6.1-sol", "m0nk111", url)
+    finally:
+        server.shutdown()
+    assert out["temperature"] == "1"
+
+
+def test_other_routes_keep_the_low_temperature():
+    server, url = catalog_server()
+    try:
+        _, out, _ = run_gated("/review=ai-kvm2-local/qwen/qwen3.5-9b", "m0nk111", url)
+    finally:
+        server.shutdown()
+    assert out["temperature"] == "0.2"
+
+
+def test_default_model_temperature_is_low():
+    rc, out, _ = run("/review")
+    assert rc == 0
+    assert out["temperature"] == "0.2"
