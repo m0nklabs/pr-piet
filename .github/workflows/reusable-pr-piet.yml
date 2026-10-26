@@ -109,8 +109,12 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event.issue.pull_request }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 20
+    # issues: write is uitsluitend voor de 👀-ontvangst-stap hieronder; de
+    # token zit alleen in DIE stap-env, nooit bij repo_mapper.py (harde
+    # regel 4: untrusted PR-code krijgt geen schrijfrechten te zien).
     permissions:
       contents: read
+      issues: write
     steps:
       - name: Commando-guard (issue_comment)
         id: cmdguard
@@ -243,6 +247,22 @@ jobs:
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
           echo "command=$command" >> "$GITHUB_OUTPUT"
           echo "command=${command:-auto}"
+
+      - name: Bevestig ontvangst (👀 op de opdracht-comment)
+        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          # Vroegste mogelijke ontvangst op de opdracht-comment: de map-job
+          # heeft geen docker-action en start dus ~30 s eerder dan review_tier1
+          # (waar de runner het pr-agent-image vooraan bouwt). Zonder dit kreeg
+          # een commando dat tijdens de queue/build werd gecancelled géén
+          # enkele reactie (oelala PR #211, 2026-10-26). GitHub dedupliceert
+          # per user per reactie, dus de dubbele post uit map+tier1 blijft
+          # één 👀.
+          gh api -X POST "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content=eyes >/dev/null || true
 
       - name: Bevestig ontvangst (👀 op de opdracht-comment)
         if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
