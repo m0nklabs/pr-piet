@@ -137,6 +137,23 @@ jobs:
           fi
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
 
+      - name: Bevestig ontvangst (👀 op de opdracht-comment)
+        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          # Vroegste mogelijke ontvangst op de opdracht-comment: de map-job
+          # heeft geen docker-action, dus de runner hoeft geen pr-agent-image
+          # te bouwen en de stap draait ~30 s eerder dan in review_tier1
+          # (waar GitHub de docker-build vooraan hoist). Zonder dit kreeg een
+          # commando dat tijdens queue/build werd gecancelled geen enkele
+          # reactie (oelala PR #211, 2026-10-26). De token zit alléén in deze
+          # stap-env, nooit bij repo_mapper.py (harde regel 4). GitHub
+          # dedupliceert per user per reactie: map + tier1 blijven één 👀.
+          gh api -X POST "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content=eyes >/dev/null || true
+
       - name: Checkout PR head
         if: steps.cmdguard.outputs.proceed == 'true'
         uses: actions/checkout@v4
@@ -261,19 +278,6 @@ jobs:
           # enkele reactie (oelala PR #211, 2026-10-26). GitHub dedupliceert
           # per user per reactie, dus de dubbele post uit map+tier1 blijft
           # één 👀.
-          gh api -X POST "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/reactions" \
-            -f content=eyes >/dev/null || true
-
-      - name: Bevestig ontvangst (👀 op de opdracht-comment)
-        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_ID: ${{ github.event.comment.id }}
-        run: |
-          # pr-agent zet zelf ook een 👀, maar pas als de action écht start.
-          # Een afgewezen model of een vroege fout gaf daardoor géén ontvangst
-          # op de comment (operator-vraag 2026-10-26). GitHub dedupliceert per
-          # user per reactie, dus dit levert nooit een dubbele 👀 op.
           gh api -X POST "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/reactions" \
             -f content=eyes >/dev/null || true
 
