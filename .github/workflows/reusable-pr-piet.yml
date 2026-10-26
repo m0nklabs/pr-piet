@@ -109,12 +109,16 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event.issue.pull_request }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 20
-    # issues: write is uitsluitend voor de 👀-ontvangst-stap hieronder; de
-    # token zit alleen in DIE stap-env, nooit bij repo_mapper.py (harde
-    # regel 4: untrusted PR-code krijgt geen schrijfrechten te zien).
+    # issues + pull-requests: write zijn uitsluitend voor de 👀-ontvangst-stap
+    # hieronder (op een PR vallen issue-comments onder de pull-requests-
+    # permissie — met alleen issues:write geeft de reactions-POST 403,
+    # gemeten 2026-10-26). De token zit alleen in DIE stap-env, nooit bij
+    # repo_mapper.py (harde regel 4: untrusted PR-code krijgt geen
+    # schrijfrechten te zien).
     permissions:
       contents: read
       issues: write
+      pull-requests: write
     steps:
       - name: Commando-guard (issue_comment)
         id: cmdguard
