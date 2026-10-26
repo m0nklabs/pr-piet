@@ -642,3 +642,40 @@
   **Losse waarneming:** dezelfde dag faalde de tier-1 default één keer met
   `RateLimitError: Provider returned error` (OpenRouter) — de nieuwe default
   hangt aan OpenRouter's rate limit; een minuut later werkte hij weer.
+
+- **"Maar geen reactie" op /review-commands (2026-10-26, `5a4b064` →
+  `7125d8d`; aanleiding: oelala PR #211, twee commands zonder enige reactie).
+  Vier oorzaken, allemaal bewezen en gefixt:**
+  1. *Cancel zonder receipt:* de tweede commando-run cancelt de eerste
+     (cancel-in-progress in de caller), die dan niets achterlaat. Fix: de
+     👀-ontvangst stap. Drie pogingen nodig:
+     (a) tier-1-stap kwam ná de door GitHub voorgehoiste docker-build
+     (~30 s) — te laat;
+     (b) verplaatst naar de map-job (geen docker-action, ~30 s eerder), maar
+     de inline heredoc brak de YAML-inspringing — workflow kapot op main
+     (`f474d84`), direct gerepareerd met een echt script
+     `scripts/post_eyes_reaction.py` (`2c2b730`);
+     (c) het script draaide vóór de pr-piet-clone (file-not-found) — alle
+     drie de stappen deterministisch ná hun clone herbouwd (`7125d8d`).
+  2. *HTTP 403 "Resource not accessible by integration"* op de reactions-POST
+     met GITHUB_TOKEN + issues:write. Mijn hypothese `reactions: write` als
+     workflow-permission was FOUT — die key bestaat niet (GitHub verwierp de
+     hele workflow, runs met 0 jobs). Werkelijke wet: issue-comments op een
+     PR zijn voor reactions gecontroleerd tegen **pull-requests: write**
+     (`35e0e74`). Bewezen: met die permission landt de 👀, ook op een
+     geannuleerde run.
+  3. *Dedupe was model-blind:* een copilot-review werd geblokkeerd door een
+     verse deepseek-review op dezelfde head. Fix: dedupe slaat alleen over
+     bij het ZELFDE model (`model_in_body`); een andere model = bewuste
+     second opinion, post gewoon (`5a4b064`).
+  E2E op pr-piet-test PR #31, exact het operator-scenario:
+  - /review=copilot + 12 s later /review → eerste run gecancelled MAAR beide
+    comments hebben 👀 van github-actions[bot];
+  - 13:12 /review (deepseek) → "head cd2dd519 is 6.8 min geleden al
+    gereviewed ... duplicaat overgeslagen" (zelfde model, geduped);
+  - 13:17 /review=copilot → review 13:18:41 CHANGES_REQUESTED met
+    `model github-copilot/openai/gpt-6.1-sol` (ander model, niet geduped).
+  Les voor volgende agent: GitHub's workflow-permission-keys zijn strikt
+  ('reactions' bestaat niet); reaction-POSTs op PR-comments vallen onder
+  pull-requests: write; en een `|| true`-stap verbergt 403s — maak cosmetische
+  stappen altijd verbeterd-uitvoerbaar (::warning::).
