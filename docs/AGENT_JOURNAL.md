@@ -585,3 +585,24 @@
   logregel "head b3f0c191 is 1.6 min geleden al gereviewed ... duplicaat
   overgeslagen". Caretaker #16 orphan opgeruimd (`duplicaten opgeruimd:
   [6404294004]`). 69 tests groen.
+
+- **Tier-1 default model → `deepseek/deepseek-v4.1-flash-1017` (2026-10-25,
+  `2440d4c`; operator-besluit "zet de /review default model op ds v4.1 flash
+  1017").** Gewijzigd: `model_tier1` default → `openai/deepseek/deepseek-v4.1-flash-1017`
+  en de cosmetische `model_tier1_label` → `deepseek-v4.1-flash-1017` (check-naam
+  wordt `Review tier 1 (deepseek-v4.1-flash-1017)`). Model vooraf live
+  geverifieerd tegen de gateway (`GET /v1/models` met de pr-piet-key, 276
+  modellen): `openrouter/deepseek/deepseek-v4.1-flash-1017`, max_context
+  1048576. De bestaande caps blijven geldig (`custom_model_max_tokens` 1048576,
+  `reasoning_max_tokens` 32000, `max_model_tokens` 1048576).
+  **Belangrijk: geen enkele caller overschrijft `model_tier1`** (alleen
+  `single_call_review: true`), dus deze ene wijziging werkt org-breed — 49
+  repos, geen caller-updates nodig. Tier 2 blijft `z-ai/glm-5.3`.
+  Ook bijgewerkt: `config/.pr_agent.toml` (stale `model`-regel stond nog op
+  deepseek-v4-flash-0731), README-tabel, AGENTS.md harde regel 1 + architectuur.
+  E2E pr-piet-test PR #28 (run 40314013305, success): job-naam
+  `Review tier 1 (deepseek-v4.1-flash-1017)`, log
+  `Generating prediction with openai/deepseek/deepseek-v4.1-flash-1017` +
+  `reasoning.max_tokens=32000`, `finish_reason: stop` (geen lege content),
+  review-body `head 4f03a5e3 · model deepseek/deepseek-v4.1-flash-1017 · 1 blocking`,
+  status-thread met hetzelfde model. 69 tests groen.
