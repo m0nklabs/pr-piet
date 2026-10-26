@@ -6,7 +6,7 @@
 # Jobs:
 #   1. map          — géén secrets: checkout PR-head, tree-sitter repo-map
 #                     (scripts/repo_mapper.py) -> .pr_piet/context.md artifact
-#   2. review_tier1 — glm-5.3-flash review mét repo-context
+#   2. review_tier1 — deepseek-v4.1-flash-1017 review mét repo-context
 #                     (artifact_path injectie). GEEN fallback: fout = rode run.
 #   3. review_tier2 — OPTIONEEL: z-ai/glm-5.2 second opinion, alleen als
 #                     tier 1 "No major issues detected" meldt.
@@ -46,20 +46,20 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-04: z-ai/glm-5.3-flash (1M context per OpenRouter-metadata). Output: provider-max (geen cap); reasoning-cap via [openrouter] in de toml; een faal wordt rode run (harde regel 2)."
+        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-25: deepseek/deepseek-v4.1-flash-1017 (1M context, live geverifieerd via /v1/models). Output: provider-max (geen cap); reasoning-cap via config.reasoning_max_tokens; een faal wordt rode run (harde regel 2)."
         required: false
         type: string
-        default: "openai/z-ai/glm-5.3-flash"
+        default: "openai/deepseek/deepseek-v4.1-flash-1017"
       model_tier2:
         description: "Tier-2 second-opinion model — draait NIET automatisch (enable_tier2 default false); handmatig via een /review2-comment."
         required: false
         type: string
         default: "openai/z-ai/glm-5.3"
       model_tier1_label:
-        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. glm-5.3-flash). Puur cosmetisch: het echte model komt uit model_tier1."
+        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. deepseek-v4.1-flash-1017). Puur cosmetisch: het echte model komt uit model_tier1."
         required: false
         type: string
-        default: "glm-5.3-flash"
+        default: "deepseek-v4.1-flash-1017"
       enable_tier2:
         description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
@@ -377,7 +377,8 @@ jobs:
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
           # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
-          # kiest de provider zelf max-effort (mandatory voor glm-5.3-flash)
+          # kiest de provider zelf max-effort (geen cap = mandatory voor glm;
+          # deepseek-v4.1 redeneert zwaarder, dus de cap blijft hoe dan ook nodig)
           # → 26-31k reasoning op zware PR's. Met 32000 is het denken gebonden
           # (~7 min totaal) en stroomt content daarna vrij. Bewezen effectief
           # via Z.AI: reasoning 8460 → 111/267 mét méér content.
@@ -394,7 +395,7 @@ jobs:
           # regels (~85-95k diff-tokens) werden DEELS gereviewd — guardian
           # PR #17: 10 bestanden overgeslagen ("Review coverage"-waarschuwing)
           # incl. capture_dispatch.py, terwijl het verdict "No major issues"
-          # luidde. Context glm-5.3-flash = 1M → 128000 past ruim; tier-2
+          # luidde. Context van beide tier-1-kandidaten = 1M → 128000 past ruim; tier-2
           # blijft bewust op 64000 (glm-5.2, second opinion).
           config.max_model_tokens: "1048576"  # prompt budget = full 1M model context (operator 2026-10-04): diff clipping effectively off, full coverage. Output cap intentionally unset (provider max applies).
           config.ai_timeout: "900"

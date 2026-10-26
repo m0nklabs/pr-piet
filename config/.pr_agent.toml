@@ -15,17 +15,19 @@
 # ============================================================================
 
 [config]
-# Tier 1 (primair): deepseek-v4-flash-0731 via de guardian gateway.
+# Tier 1 (primair): deepseek-v4.1-flash-1017 via de guardian gateway
+# (operator-besluit 2026-10-25; de workflow-env `config.model` overrschrijft
+# deze regel — hij staat hier alleen zodat een run zonder env dezelfde
+# default gebruikt).
 # Prefix "openai/" dwingt litellm de OpenAI-compatibele route te gebruiken
 # (api_base uit de workflow-env). Deze model-naam staat niet in pr-agent's
 # MAX_TOKENS-tabel, dus custom_model_max_tokens is verplicht.
-model = "openai/deepseek/deepseek-v4-flash-0731"
+model = "openai/deepseek/deepseek-v4.1-flash-1017"
 
 # Bewust LEEG: geen fallback. Een gateway/model-fout faalt de workflow.
 fallback_models = []
 
-# Context-window van deepseek-v4-flash-0731 volgens de gateway-catalog
-# (models.cloud.overrides.yaml: context_window 1048576).
+# Context-window volgens de live gateway-catalog (/v1/models: 1048576).
 custom_model_max_tokens = 1048576
 
 # Harde cap per request. Default is 32000; met 1M-context model en
