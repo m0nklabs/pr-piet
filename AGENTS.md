@@ -23,12 +23,26 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    de hoofd-agent. De hoofd-agent start delegaties parallel en doet andere
    productieve stappen; poll niet in de hoofd-context. (Zie ook de
    dsh-richtlijn over achtergrond-jobs: nooit busy-pollen in de hoofdlus.)
-1. **Alleen open-weights modellen.** `STRICT_OPEN_WEIGHTS_ONLY`:
-   `deepseek/deepseek-v4.1-flash-1017` (tier 1, sinds 2026-10-25;
-   operator-besluit) en `z-ai/glm-5.3` (tier 2, optionele second opinion).
-   Nooit closed-weights modellen toevoegen. De tier-1-default staat in de
-   reusable workflow (`model_tier1` + cosmetische `model_tier1_label`); geen
-   enkele caller overschrijft hem, dus één wijziging werkt org-breed.
+1. **Modelbeleid — de poort hangt af van WIE het vraagt** (operator-besluit
+   2026-10-26: "alles wat guardian serveert is allowed voor @m0nk111").
+   - **Standaard (elke andere actor): alleen open-weights**, via
+     `config/models.allowed.yaml`. Tier-1 default =
+     `deepseek/deepseek-v4.1-flash-1017` (sinds 2026-10-25), tier-2 =
+     `z-ai/glm-5.3`. De default staat in de reusable workflow
+     (`model_tier1` + cosmetische `model_tier1_label`); geen enkele caller
+     overschrijft hem, dus één wijziging werkt org-breed.
+   - **@m0nk111 mag élk model uit de live gateway-catalogus** gebruiken
+     (`GET /v1/models`, 276 ids) via `/review=<model>`. Validatie is dynamisch,
+     dus nooit stale; een onbekend id faalt nog steeds hard (exit 3).
+   - **Route-voorkeur bij een bare id** (`ROUTE_PRIORITY` in
+     `parse_review_command.py`): lokaal (`ai-kvm2-local/`, gratis) →
+     `github-copilot/` (Copilot-abonnement) → `openrouter/`, `groq/`,
+     `nvidia/`, `openai/` (per-token betaald). De gekozen route staat in het
+     log én in de review-body, dus de billing-pad is altijd zichtbaar.
+   - **Temperatuur beweegt mee met de route**: de github-copilot-bridge
+     weigert alles behalve `temperature=1` zolang reasoning actief is
+     (gemeten 2026-10-26 op gpt-6.1-sol), dus de parser emit
+     `temperature=1` voor die route en `0.2` elders.
 2. **GEEN fallback_models.** Een model- of gateway-fout moet een rode
    workflow zijn, geen stille degradatie. `fallback_models = []` blijft leeg.
 3. **Geen secrets in deze repo.** De gateway-key (`GUARDIAN_API_KEY`) is een

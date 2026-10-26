@@ -606,3 +606,39 @@
   `reasoning.max_tokens=32000`, `finish_reason: stop` (geen lege content),
   review-body `head 4f03a5e3 · model deepseek/deepseek-v4.1-flash-1017 · 1 blocking`,
   status-thread met hetzelfde model. 69 tests groen.
+
+- **Modelpoort wordt actor-gescoped: @m0nk111 mag alles wat de gateway
+  serveert (2026-10-26, `68b2b07` + `43566df`).** Aanleiding: operator postte
+  `/review=github-copilot/openai/gpt-6.1-sol` op oelala PR #211 en kreeg een
+  rode run ("model ... is not allowed") + géén 👀 op zijn comment, en vroeg
+  daarna: "allowlist? alles wat guardian serveert is allowed voor @m0nk111".
+  Onderzocht en vastgesteld:
+  * De 👀 komt van **pr-agent zelf** (`github_action_runner.py:404` →
+    `add_eyes_reaction`), dus pas als de action écht start. Elke vroege fout
+    (allowlist, pr-state) gaf dus géén ontvangst op de comment. Nu zet de
+    workflow zelf een 👀 vóór de model-poort (GitHub dedupliceert per user per
+    reactie, dus nooit dubbel).
+  * Gateway-adressering: `/v1/models` levert **volledige route-ids**
+    (`github-copilot/openai/gpt-6.1-sol`); litellm zet er `openai/` voor en
+    stript het weer. Mijn eerste test (`openai/github-copilot/...` direct naar
+    de gateway) faalde met "invalid model ID" — dat was mijn fout, niet die van
+    de gateway.
+  * Nieuwe poort in `parse_review_command.py`: `--actor` +
+    `--unrestricted-actors` + `--catalog-url`. Voor @m0nk111 wordt het id
+    gevalideerd tegen de LIVE catalogus (nooit stale); anderen blijven op de
+    open-weights-allowlist. Resolutie: exact → langste-suffix → route-voorkeur
+    (lokaal > copilot > metered). Catalogus onbereikbaar → fail-open met
+    warning (de modelcall is zelf even luid).
+  * **Bug onderweg:** de copilot-bridge gaf
+    `UnsupportedParamsError: ... doesn't support temperature=0.2 while
+    reasoning is active. Only temperature=1`. Opgelost met een
+    route-afhankelijke `temperature`-output (1 voor `github-copilot/`, 0.2
+    elders) die als `config.temperature` env meegaat.
+  E2E pr-piet-test PR #29 (run 40316293519, success): resolutie-log
+  `resolved to gateway id 'github-copilot/openai/gpt-6.1-sol' (actor @m0nk111)`,
+  action `Generating prediction with openai/github-copilot/openai/gpt-6.1-sol`,
+  `temperature=1`, review-body `head bede5447 · model github-copilot/openai/gpt-6.1-sol`,
+  👀 op de comment. 79 tests groen.
+  **Losse waarneming:** dezelfde dag faalde de tier-1 default één keer met
+  `RateLimitError: Provider returned error` (OpenRouter) — de nieuwe default
+  hangt aan OpenRouter's rate limit; een minuut later werkte hij weer.
