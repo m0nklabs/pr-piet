@@ -141,3 +141,140 @@ def test_allowlist_entries_are_bare_ids():
     for model in models:
         assert not model.startswith("openai/"), model
         assert not model.startswith("openrouter/"), model
+
+
+# --- actor-scoped catalog gate (operator decision 2026-10-26) -------------
+
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+CATALOG = [
+    "ai-kvm2-local/qwen/qwen3.5-9b",
+    "github-copilot/openai/gpt-6.1-sol",
+    "openai/openai/gpt-6.1-sol",
+    "openrouter/deepseek/deepseek-v4.1-flash-1017",
+    "openrouter/openai/gpt-6.1-sol",
+]
+
+
+class _CatalogHandler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802 - stdlib naming
+        payload = json.dumps({"data": [{"id": i} for i in CATALOG]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, *args):  # silence the test output
+        pass
+
+
+def catalog_server():
+    server = HTTPServer(("127.0.0.1", 0), _CatalogHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_port}/v1/models"
+
+
+def run_gated(body, actor, catalog_url, *extra, default=DEFAULT_T1):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--comment-body",
+            body,
+            "--allowlist",
+            str(ALLOWLIST),
+            "--default-model",
+            default,
+            "--actor",
+            actor,
+            "--unrestricted-actors",
+            "m0nk111",
+            "--catalog-url",
+            catalog_url,
+            *extra,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    outputs = {}
+    for line in result.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            outputs[key] = value
+    return result.returncode, outputs, result.stderr
+
+
+def test_operator_may_pick_a_closed_weights_gateway_model():
+    server, url = catalog_server()
+    try:
+        rc, out, _ = run_gated("/review=github-copilot/openai/gpt-6.1-sol", "m0nk111", url)
+    finally:
+        server.shutdown()
+    assert rc == 0
+    # The route prefix is preserved: it decides the billing path.
+    assert out["model"] == "openai/github-copilot/openai/gpt-6.1-sol"
+    assert out["model_label"] == "github-copilot/openai/gpt-6.1-sol"
+    assert out["override"] == "true"
+
+
+def test_operator_bare_id_prefers_the_subscription_route():
+    """openai/gpt-6.1-sol exists on three routes; copilot beats the metered ones."""
+    server, url = catalog_server()
+    try:
+        rc, out, _ = run_gated("/review=openai/gpt-6.1-sol", "m0nk111", url)
+    finally:
+        server.shutdown()
+    assert rc == 0
+    assert out["model_label"] == "github-copilot/openai/gpt-6.1-sol"
+
+
+def test_operator_local_route_wins_over_everything():
+    server, url = catalog_server()
+    try:
+        rc, out, _ = run_gated("/review=ai-kvm2-local/qwen/qwen3.5-9b", "m0nk111", url)
+    finally:
+        server.shutdown()
+    assert rc == 0
+    assert out["model_label"] == "ai-kvm2-local/qwen/qwen3.5-9b"
+
+
+def test_operator_unknown_model_is_still_rejected():
+    server, url = catalog_server()
+    try:
+        rc, _, err = run_gated("/review=does-not/exist", "m0nk111", url)
+    finally:
+        server.shutdown()
+    assert rc == 3
+    assert "not served by the guardian gateway" in err
+
+
+def test_other_actor_is_held_to_the_open_weights_allowlist():
+    server, url = catalog_server()
+    try:
+        rc, _, err = run_gated("/review=github-copilot/openai/gpt-6.1-sol", "random-user", url)
+    finally:
+        server.shutdown()
+    assert rc == 3
+    assert "is not allowed for @random-user" in err
+
+
+def test_other_actor_still_gets_open_weights():
+    server, url = catalog_server()
+    try:
+        rc, out, _ = run_gated("/review=z-ai/glm-5.3", "random-user", url)
+    finally:
+        server.shutdown()
+    assert rc == 0
+    assert out["model"] == "openai/z-ai/glm-5.3"
+
+
+def test_catalog_outage_fails_open_for_the_operator():
+    """A gateway hiccup must not block the review: the model call will speak."""
+    rc, out, err = run_gated("/review=github-copilot/openai/gpt-6.1-sol", "m0nk111", "http://127.0.0.1:9/none")
+    assert rc == 0
+    assert out["override"] == "true"
+    assert "catalog unavailable" in err

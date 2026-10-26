@@ -307,11 +307,25 @@ jobs:
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
           ls -la .pr_piet/
 
+      - name: Bevestig ontvangst (👀 op de opdracht-comment)
+        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          # pr-agent zet zelf ook een 👀, maar pas als de action écht start.
+          # Een afgewezen model of een vroege fout gaf daardoor géén ontvangst
+          # op de comment (operator-vraag 2026-10-26). GitHub dedupliceert per
+          # user per reactie, dus dit levert nooit een dubbele 👀 op.
+          gh api -X POST "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content=eyes >/dev/null || true
+
       - name: Model-override (/review=<model>)
         id: model
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true'
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
+          GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}
         run: |
           # /review=<model> kiest het model voor deze run. De allowlist
           # (config/models.allowed.yaml) is de beleidspoort voor harde regel 1
@@ -321,7 +335,10 @@ jobs:
           output=$(python3 pr-piet/scripts/parse_review_command.py \
             --allowlist pr-piet/config/models.allowed.yaml \
             --default-model "${{ inputs.model_tier1 }}" \
-            --expect review 2>&1)
+            --expect review \
+            --actor "${{ github.event.comment.user.login }}" \
+            --unrestricted-actors "m0nk111" \
+            --catalog-url "http://127.0.0.1:11434/v1/models" 2>&1)
           rc=$?
           printf '%s\n' "$output"
           if [ "$rc" -ne 0 ]; then
@@ -594,10 +611,20 @@ jobs:
         run: |
           cp pr-piet/config/.pr_agent.toml .pr_piet/.pr_agent.toml
 
+      - name: Bevestig ontvangst (👀 op de opdracht-comment)
+        if: github.event_name == 'issue_comment' && steps.cmdguard.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}/reactions" \
+            -f content=eyes >/dev/null || true
+
       - name: Model-override (/review2=<model>)
         id: model
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
+          GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}
         run: |
           # Zelfde allowlist-poort als tier 1 (harde regel 1: alleen
           # open-weights). --expect review2 houdt de tiers gescheiden: een
@@ -606,7 +633,10 @@ jobs:
           output=$(python3 pr-piet/scripts/parse_review_command.py \
             --allowlist pr-piet/config/models.allowed.yaml \
             --default-model "${{ inputs.model_tier2 }}" \
-            --expect review2 2>&1)
+            --expect review2 \
+            --actor "${{ github.event.comment.user.login }}" \
+            --unrestricted-actors "m0nk111" \
+            --catalog-url "http://127.0.0.1:11434/v1/models" 2>&1)
           rc=$?
           printf '%s\n' "$output"
           if [ "$rc" -ne 0 ]; then

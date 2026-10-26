@@ -17,9 +17,18 @@ gateway id (``z-ai/glm-5.3``). A leading ``openai/`` litellm routing prefix is
 accepted and re-applied, so both ``/review=z-ai/glm-5.3`` and
 ``/review=openai/z-ai/glm-5.3`` work.
 
-HARD RULE 1: only models listed in config/models.allowed.yaml (open-weights)
-are accepted. An unknown id exits 3 so the workflow can fail loudly instead of
-silently reviewing with a different model.
+POLICY (operator decision 2026-10-26): the gate depends on WHO asks.
+  * An actor listed in --unrestricted-actors (the operator's own GitHub
+    account) may pick ANY model the guardian gateway serves; the id is
+    validated against the live catalog (GET {gateway}/v1/models), so it is
+    always current instead of a stale static list.
+  * Every other actor is limited to config/models.allowed.yaml (open-weights).
+An unknown id exits 3 so the workflow fails loudly instead of silently
+reviewing with a different model.
+
+When a bare vendor/model id matches several routes the most harmless route
+wins: local GPU first, then the github-copilot subscription bridge, then the
+metered cloud routes (see ROUTE_PRIORITY).
 
 Outputs (GITHUB_OUTPUT when set, otherwise stdout as key=value lines):
     proceed      true|false          run the workflow at all
@@ -32,9 +41,11 @@ Outputs (GITHUB_OUTPUT when set, otherwise stdout as key=value lines):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
+import urllib.request
 
 import yaml
 
@@ -59,6 +70,19 @@ ROUTE_PREFIXES = (
     "14700k-local/",
     "nvidia/",
     "groq/",
+    "openai/",
+)
+
+# When a bare id matches several catalog routes, prefer the cheapest/harmless
+# one: local GPU (free) -> github-copilot (subscription billing) -> metered
+# cloud routes. Anything not listed sorts last, alphabetically.
+ROUTE_PRIORITY = (
+    "ai-kvm2-local/",
+    "14700k-local/",
+    "github-copilot/",
+    "openrouter/",
+    "groq/",
+    "nvidia/",
     "openai/",
 )
 
@@ -116,6 +140,53 @@ def resolve_model(raw: str, allowed: list[str]) -> str | None:
     return None
 
 
+def fetch_catalog(url: str, key: str, timeout: float = 10.0) -> list[str] | None:
+    """Live model ids from the gateway (None when unreachable).
+
+    The catalog is the source of truth for "what guardian serves", so the
+    operator-scoped gate never goes stale the way a hand-maintained list does.
+    """
+    if not url:
+        return None
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode())
+    except Exception as exc:  # noqa: BLE001 - caller decides fail-open/closed
+        print(f"gateway catalog unavailable ({exc})", file=sys.stderr)
+        return None
+    return [entry.get("id", "") for entry in payload.get("data", []) if entry.get("id")]
+
+
+def route_rank(model_id: str) -> tuple[int, str]:
+    for index, prefix in enumerate(ROUTE_PRIORITY):
+        if model_id.startswith(prefix):
+            return (index, model_id)
+    return (len(ROUTE_PRIORITY), model_id)
+
+
+def resolve_in_catalog(raw: str, catalog: list[str]) -> str | None:
+    """Best catalog match for a requested id.
+
+    Exact matches win. Otherwise the LONGEST suffix wins, so
+    ``openai/gpt-6.1-sol`` resolves against ``*/openai/gpt-6.1-sol`` and not
+    against an unrelated vendor that happens to end in ``/gpt-6.1-sol``.
+    Among equally specific matches the route priority decides (local GPU ->
+    github-copilot subscription -> metered cloud), and the chosen id is
+    logged so the operator always sees which billing path ran.
+    """
+    catalog_set = set(catalog)
+    exact = [c for c in candidates(raw) if c in catalog_set]
+    if exact:
+        return sorted(exact, key=route_rank)[0]
+
+    for suffix in candidates(raw):
+        matches = [c for c in catalog if c.endswith(f"/{suffix}")]
+        if matches:
+            return sorted(matches, key=route_rank)[0]
+    return None
+
+
 def emit(pairs: dict[str, str]) -> None:
     """Write outputs to GITHUB_OUTPUT when available, else to stdout."""
     target = os.environ.get("GITHUB_OUTPUT")
@@ -149,6 +220,26 @@ def main() -> int:
         choices=REVIEW_COMMANDS,
         default=None,
         help="only honour a model override on this command (tier isolation)",
+    )
+    parser.add_argument(
+        "--actor",
+        default="",
+        help="GitHub login that wrote the comment (scopes the policy gate)",
+    )
+    parser.add_argument(
+        "--unrestricted-actors",
+        default="",
+        help="comma-separated logins allowed to pick ANY gateway model",
+    )
+    parser.add_argument(
+        "--catalog-url",
+        default="",
+        help="gateway /v1/models URL; empty = skip the catalog check",
+    )
+    parser.add_argument(
+        "--catalog-key-env",
+        default="GUARDIAN_API_KEY",
+        help="env var holding the gateway key for the catalog request",
     )
     args = parser.parse_args()
 
@@ -189,20 +280,48 @@ def main() -> int:
         )
         return 3
 
-    try:
-        allowed = load_allowlist(args.allowlist)
-    except Exception as exc:  # noqa: BLE001 - fail closed, never guess
-        print(f"::error::cannot read model allowlist: {exc}", file=sys.stderr)
-        return 3
+    unrestricted = {
+        login.strip().lower().lstrip("@")
+        for login in args.unrestricted_actors.split(",")
+        if login.strip()
+    }
+    actor = args.actor.strip().lower().lstrip("@")
 
-    canonical = resolve_model(raw_model, allowed)
-    if canonical is None:
-        print(
-            f"::error::model '{raw_model}' is not allowed (open-weights allowlist: "
-            f"{args.allowlist}). Allowed: {', '.join(allowed)}",
-            file=sys.stderr,
-        )
-        return 3
+    if actor and actor in unrestricted:
+        # Operator scope: anything the gateway actually serves may be used.
+        catalog = fetch_catalog(args.catalog_url, os.environ.get(args.catalog_key_env, ""))
+        if catalog is None:
+            # Fail-open: the gateway is the thing that would reject an unknown
+            # id anyway, and its error is just as loud. Never block a review
+            # because the policy source had a hiccup.
+            canonical = raw_model.removeprefix("openai/")
+            print(f"::warning::catalog unavailable — accepting '{canonical}' unchecked")
+        else:
+            canonical = resolve_in_catalog(raw_model, catalog)
+            if canonical is None:
+                print(
+                    f"::error::model '{raw_model}' is not served by the guardian "
+                    f"gateway ({len(catalog)} models). Check "
+                    f"GET {args.catalog_url} for the exact id.",
+                    file=sys.stderr,
+                )
+                return 3
+            print(f"model '{raw_model}' resolved to gateway id '{canonical}' (actor @{actor})")
+    else:
+        try:
+            allowed = load_allowlist(args.allowlist)
+        except Exception as exc:  # noqa: BLE001 - fail closed, never guess
+            print(f"::error::cannot read model allowlist: {exc}", file=sys.stderr)
+            return 3
+
+        canonical = resolve_model(raw_model, allowed)
+        if canonical is None:
+            print(
+                f"::error::model '{raw_model}' is not allowed for @{actor or 'this actor'} "
+                f"(open-weights allowlist: {args.allowlist}). Allowed: {', '.join(allowed)}",
+                file=sys.stderr,
+            )
+            return 3
 
     base["model"] = f"openai/{canonical}"
     base["model_label"] = canonical
