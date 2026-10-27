@@ -25,12 +25,19 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    dsh-richtlijn over achtergrond-jobs: nooit busy-pollen in de hoofdlus.)
 1. **Modelbeleid — de poort hangt af van WIE het vraagt** (operator-besluit
    2026-10-26: "alles wat guardian serveert is allowed voor @m0nk111").
-   - **Standaard (elke andere actor): alleen open-weights**, via
-     `config/models.allowed.yaml`. Tier-1 default =
-     `deepseek/deepseek-v4.1-flash-1017` (sinds 2026-10-25), tier-2 =
-     `z-ai/glm-5.3`. De default staat in de reusable workflow
-     (`model_tier1` + cosmetische `model_tier1_label`); geen enkele caller
-     overschrijft hem, dus één wijziging werkt org-breed.
+   - **Tier-1 default = `github-copilot/openai/gpt-6.1-sol`** (operator-besluit
+     2026-10-27). Dat is **closed-weights** en factureert op de
+     Copilot-abonnement-quota — bewust gekozen: deepseek-v4.1-flash-1017 liep
+     op reuzen-PR's 25+ min vast op `finish_reason: length` met lege content
+     (budget, geen budget, 131k-backstop, effort=medium en streaming allemaal
+     gemeten en uitgeput), terwijl sol dezelfde PR in 2 min 17 s volledig
+     reviewde. Tier-2 blijft `z-ai/glm-5.3` (open-weights). De default staat in
+     de reusable workflow (`model_tier1` + cosmetische `model_tier1_label`);
+     geen enkele caller overschrijft hem, dus één wijziging werkt org-breed —
+     inclusief de automatische reviews in alle 49 repos.
+   - **Override-poort voor andere actoren: alleen open-weights**, via
+     `config/models.allowed.yaml` (de allowlist gate't overschrijvingen, niet
+     de default).
    - **@m0nk111 mag élk model uit de live gateway-catalogus** gebruiken
      (`GET /v1/models`, 276 ids) via `/review=<model>`. Validatie is dynamisch,
      dus nooit stale; een onbekend id faalt nog steeds hard (exit 3).
@@ -100,7 +107,7 @@ doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
        │                    The-PR-Agent/pr-agent; patch: conditional
        │                    suggested_fix veld, zie PR-PIET-PATCH.md daar)
        │                    met artifact_path=.pr_piet/context.md,
-       │                    model=openai/deepseek/deepseek-v4.1-flash-1017,
+       │                    model=openai/github-copilot/openai/gpt-6.1-sol,
        │                    fallback_models=[], OPENAI.API_BASE=gateway
        │                    → detect_review_clean.py (tier1_clean output)
        └─ job review_tier2 : alleen als enable_tier2 && tier1_clean

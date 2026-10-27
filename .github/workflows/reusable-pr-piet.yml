@@ -6,7 +6,7 @@
 # Jobs:
 #   1. map          — géén secrets: checkout PR-head, tree-sitter repo-map
 #                     (scripts/repo_mapper.py) -> .pr_piet/context.md artifact
-#   2. review_tier1 — deepseek-v4.1-flash-1017 review mét repo-context
+#   2. review_tier1 — gpt-6.1-sol (Copilot-bridge) review mét repo-context
 #                     (artifact_path injectie). GEEN fallback: fout = rode run.
 #   3. review_tier2 — OPTIONEEL: z-ai/glm-5.2 second opinion, alleen als
 #                     tier 1 "No major issues detected" meldt.
@@ -46,20 +46,20 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-25: deepseek/deepseek-v4.1-flash-1017 (1M context, live geverifieerd via /v1/models). Output: provider-max (geen cap, geen reasoning-budget — operator-besluit 2026-10-27); een faal wordt rode run (harde regel 2)."
+        description: "Tier-1 model (via gateway). Operator-besluit 2026-10-27: github-copilot/openai/gpt-6.1-sol via de Copilot-bridge — bewezen op de reuzen-PR waar deepseek-v4.1 25+ min vastliep (2 min 17 s, volwaardige review). Let op: dit is CLOSED-WEIGHTS en factureert op de Copilot-abonnement-quota. Een faal wordt rode run (harde regel 2)."
         required: false
         type: string
-        default: "openai/deepseek/deepseek-v4.1-flash-1017"
+        default: "openai/github-copilot/openai/gpt-6.1-sol"
       model_tier2:
         description: "Tier-2 second-opinion model — draait NIET automatisch (enable_tier2 default false); handmatig via een /review2-comment."
         required: false
         type: string
         default: "openai/z-ai/glm-5.3"
       model_tier1_label:
-        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. deepseek-v4.1-flash-1017). Puur cosmetisch: het echte model komt uit model_tier1."
+        description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. gpt-6.1-sol). Puur cosmetisch: het echte model komt uit model_tier1."
         required: false
         type: string
-        default: "deepseek-v4.1-flash-1017"
+        default: "gpt-6.1-sol"
       enable_tier2:
         description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
@@ -473,18 +473,15 @@ jobs:
           # incl. capture_dispatch.py, terwijl het verdict "No major issues"
           # luidde. Context van beide tier-1-kandidaten = 1M → 128000 past ruim; tier-2
           # blijft bewust op 64000 (glm-5.2, second opinion).
-          # Per-call prompt-budget. Bewust GEEN 1M meer (operator-idee
-          # 2026-10-27: "de PR in delen behandelen"): met 1M werd er nooit
-          # gechunked en moest één call een reuzen-diff in één keer
-          # doordenken — precies waar deepseek-v4.1's reasoning ontplofte.
-          # 131072 per call laat normale PR's (<131k tokens) ongemoeid en
-          # duwt alleen reuzen-PR's naar de chunk-flow hieronder.
-          config.max_model_tokens: "131072"
-          # Grote PR's in delen reviewen (fork-bestaat-al: get_pr_multi_diffs +
-          # merge_review_chunks). Elke chunk is een eigen, kleinere call met
-          # een eigen budget; de resultaten worden samengevoegd tot één review.
-          config.enable_large_pr_chunking: "true"
-          config.max_number_of_calls: "3"
+          # Prompt-budget = volle modelcontext: diff-clipping staat effectief
+          # uit (operator 2026-10-04), en de output-backstop hierboven is de
+          # enige garde. LET OP bij het aanzetten van
+          # pr_reviewer.enable_large_pr_chunking (bestaat in de fork): dat
+          # vereist een prompt-budget dat kleiner is dan de output-reserve,
+          # anders faalt de run met "The required prompt leaves no input
+          # capacity" (gemeten 2026-10-27). Chunking is met een capabel model
+          # ook niet nodig — de reuzen-PR ging in 2 min door.
+          config.max_model_tokens: "1048576"
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
