@@ -433,6 +433,12 @@ jobs:
           # (~7 min totaal) en stroomt content daarna vrij. Bewezen effectief
           # via Z.AI: reasoning 8460 → 111/267 mét méér content.
           config.reasoning_max_tokens: "32000"
+          # Expliciete output-cap: zonder deze past OpenRouter een lage
+          # provider-default toe en vreet het reasoning-budget die plek leeg
+          # (empty content, finish_reason: length — caretaker #15/#16,
+          # 2026-10-27). 49152 = budget 32000 + ~17k content-headroom; ruim
+          # onder de provider-caps (deepseek-v4.1: 393k, glm-5.3-flash: 943k).
+          config.max_output_tokens: "49152"
           # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
           # "Preparing review...", "No major issues detected", fail-comment):
           # de zakelijke output is uitsluitend onze formele review + status-thread.
@@ -705,7 +711,13 @@ jobs:
           config.temperature: ${{ steps.model.outputs.temperature }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
-          config.reasoning_max_tokens: "32000"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")
+          config.reasoning_max_tokens: "32000"
+          # Expliciete output-cap: zonder deze past OpenRouter een lage
+          # provider-default toe en vreet het reasoning-budget die plek leeg
+          # (empty content, finish_reason: length — caretaker #15/#16,
+          # 2026-10-27). 49152 = budget 32000 + ~17k content-headroom; ruim
+          # onder de provider-caps (deepseek-v4.1: 393k, glm-5.3-flash: 943k).
+          config.max_output_tokens: "49152"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")
           # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
           # "Preparing review...", "No major issues detected", fail-comment):
           # de zakelijke output is uitsluitend onze formele review + status-thread.
