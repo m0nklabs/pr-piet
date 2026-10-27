@@ -713,7 +713,9 @@ jobs:
           config.temperature: ${{ steps.model.outputs.temperature }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
-          # Geen reasoning-budget / output-cap — zelfde besluit als tier-1.
+          # Geen reasoning-budget — zelfde besluit als tier-1. Wél dezelfde
+          # royale output-backstop (OpenRouter's onbekende default anders).
+          config.max_output_tokens: "131072"
           # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
           # "Preparing review...", "No major issues detected", fail-comment):
           # de zakelijke output is uitsluitend onze formele review + status-thread.
