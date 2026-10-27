@@ -120,3 +120,19 @@ enable = true
 target_tools = ["pr_reviewer", "pr_description", "pr_code_suggestions"]
 max_artifact_size = 50000
 
+
+[litellm]
+# Forceer streaming voor alle calls naar de guardian-gateway (openai-compat
+# route). Waarom: OpenRouter knipt NON-streaming generations op ~600 s en
+# geeft dan finish_reason "length" met LEEG content terug — deepseek-v4.1's
+# reasoning op grote PR's loopt daar overheen (caretaker #15/#16, 2026-10-27:
+# lege reviews na 282/560/606 s). Streaming heeft die muur niet; de gateway
+# forwards de chunks en provider.timeout_seconds (1200 s) is dan de garde.
+# Gebruikte fork-haak: _get_completion -> force_streaming_for_request
+# (provider "openai" + api_base-substring), met stream_options include_usage.
+force_streaming_custom_llm_provider = "openai"
+force_streaming_api_base_substrings = [
+  "172.17.0.1:11434",
+  "127.0.0.1:11434",
+  "llama_cpp_guardian",
+]
