@@ -427,13 +427,20 @@ jobs:
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
           # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
-          # GEEN reasoning-budget en GEEN output-cap meer (operator-besluit
-          # 2026-10-27: "geen budgetten, steeds weer te strak"). Gemeten zonder
-          # budget: het model stopt zelf (finish=stop, reasoning ~1-2k tokens,
-          # content stroomt — ook op ~30k-token prompts). De enige overgebleven
-          # garde is tijd (ai_timeout=900) en de provider-caps (393k/943k).
-          # Zie ook de fork-guard: een evt. reasoning-effort wordt overgeslagen
-          # zodra iemand ooit weer een token-budget configureert.
+          # GEEN reasoning-budget (operator-besluit 2026-10-27: "geen
+          # budgetten, steeds weer te strak"). Bewezen: het budget van 32000
+          # stikte deepseek op caretaker #15 — de replay zonder budget
+          # redeneerde 34126 tokens en leverde wél content. De fork-guard
+          # slaat een evt. reasoning-effort over zodra iemand ooit weer een
+          # token-budget configureert.
+          #
+          # Wél één ROYALE output-backstop: zonder max_tokens past OpenRouter
+          # een onbekende provider-default toe (~40-50k) en liep een
+          # diepe-reasoning-call daar tegenaan (empty content, finish_reason:
+          # length, 442 s — caretaker #15/#16, 2026-10-27). 131072 is 4x het
+          # grootste waargenomen antwoord (37k) en ruim onder de provider-cap
+          # (deepseek-v4.1: 393k). Dat is een vangnet, geen begrenzing.
+          config.max_output_tokens: "131072"
           # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
           # "Preparing review...", "No major issues detected", fail-comment):
           # de zakelijke output is uitsluitend onze formele review + status-thread.
