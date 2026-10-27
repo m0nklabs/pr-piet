@@ -418,6 +418,12 @@ jobs:
           # Route-afhankelijk: de github-copilot-bridge weigert alles
           # behalve temperature=1 zolang reasoning actief is.
           config.temperature: ${{ steps.model.outputs.temperature }}
+          # Expliciete provider + geforceerde streaming: OpenRouter knipt
+          # non-streaming calls op ~600 s (leeg content, finish_reason length).
+          # De fork-force_streaming-gate vereist custom_llm_provider ==
+          # litellm.force_streaming_custom_llm_provider ("openai") én een
+          # api_base-substring (staat in config/.pr_agent.toml).
+          config.custom_llm_provider: "openai"
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
           # Harde output-begrenzing (fork-knop, ONLY tier-1): pr-agent stuurt
@@ -711,6 +717,12 @@ jobs:
           # Route-afhankelijk: de github-copilot-bridge weigert alles
           # behalve temperature=1 zolang reasoning actief is.
           config.temperature: ${{ steps.model.outputs.temperature }}
+          # Expliciete provider + geforceerde streaming: OpenRouter knipt
+          # non-streaming calls op ~600 s (leeg content, finish_reason length).
+          # De fork-force_streaming-gate vereist custom_llm_provider ==
+          # litellm.force_streaming_custom_llm_provider ("openai") én een
+          # api_base-substring (staat in config/.pr_agent.toml).
+          config.custom_llm_provider: "openai"
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
           # Geen reasoning-budget — zelfde besluit als tier-1. Wél dezelfde
