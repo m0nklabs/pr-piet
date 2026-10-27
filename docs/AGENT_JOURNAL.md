@@ -720,3 +720,21 @@
   afwachtende verificatie is gedelegeerd (subagent). De 400-fix en de
   output-backstop zijn onafhankelijk bewezen (pr-piet-test #32: glm-override
   groen, deepseek groen, `max_tokens=49152`→`131072` op de wire).
+
+- **Streaming bewezen op transportniveau, maar de faalmodus is model-gedrag
+  (2026-10-27, slot).** Run `40525353582` (caretaker #16): streaming engaged
+  (`Using streaming mode` 2×), calls van 764/698 s overleefden de 600 s-muur
+  — en eindigden tóch op `finish_reason: length` met nul content: het model
+  verbrandde het volledige output-budget (131072) aan reasoning bij ~171
+  tok/s. `reasoning_effort=medium` (`c7f7ec1`,
+  additional_reasoning_effort_models) wordt door OpenRouter voor dit model
+  genegeerd — zelfde lege content (run `40531646316`, ref `c7f7ec1`).
+  Totaaloverzicht van de dag op caretaker #15/#16: budget 32000 → leeg;
+  budgetloos → leeg; 131072-backstop → leeg; effort=medium → genegeerd,
+  leeg; streaming → transport OK, model-gedrag onveranderd. Één geslaagde
+  run (12:06, `40501191718`) en één geslaagde replay (34126 reasoning-tokens
+  + 3120 content) bewijzen dat het KAN — het is een non-deterministische
+  reasoning-explosie op deze PR-class. Conclusie: deepseek-v4.1-flash-1017
+  via OpenRouter is onbetrouwbaar voor reuzen-PR's, ongeacht parameterisatie.
+  De gebouwde infrastructuur (streaming-pad, backstop, fork-guards) blijft
+  staan — die is model-onafhankelijk correct.
