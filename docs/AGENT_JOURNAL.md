@@ -679,3 +679,44 @@
   ('reactions' bestaat niet); reaction-POSTs op PR-comments vallen onder
   pull-requests: write; en een `|| true`-stap verbergt 403s — maak cosmetische
   stappen altijd verbeterd-uitvoerbaar (::warning::).
+
+- **"Reviews lopen vast" dag 2: de reasoning-muur eindelijk ontrafeld
+  (2026-10-27, commits `986dc24` → `fc67997` + fork `c8c068b7`/`0a3f865c`;
+  operator-besluiten: "geen budgetten meer" + "deepseek houden, streaming
+  bouwen").** Symptoom: 5 rode PR-Piet-runs op caretaker #15/#16 + guardian
+  #33, telkens `Empty content in model response (finish_reason: length)` op
+  deepseek-v4.1-flash-1017. Diagnose in vier lagen, elk met bewijs:
+  1. *Dual-reasoning-params (glm-override):* `/review=z-ai/glm-5.3-flash`
+     resolvet naar de openrouter-route; de fork attachte toen BOTH
+     `reasoning_effort=medium` (generic branch) én
+     `reasoning.max_tokens=32000` (openai-compat branch) → OpenRouter 400
+     "Only one of reasoning.effort and reasoning.max_tokens". Probe
+     bevestigde beide shapes. Fix fork `c8c068b7`: de budget wint, effort
+     wordt overgeslagen.
+  2. *Budget stikte het model:* budget 32000 knipte midden in de reasoning
+     (caretaker #15: replay zonder budget redeneerde 34126 tokens en leverde
+     wél content). Operator-besluit: ALLE token-budgetten eruit
+     (`986dc24`) — `reasoning_max_tokens` én de ochtend-stopgap
+     `max_output_tokens` uit beide tiers.
+  3. *OpenRouter's onbekende default cap:* zonder expliciete max_tokens knipt
+     OpenRouter zelf (282 s-cut gemeten). Fix `0f027eb`/`6da0efa`: één
+     ROYALE output-backstop `max_output_tokens: 131072` (4× het grootste
+     geobserveerde antwoord; vangnet, geen begrenzing).
+  4. *De échte muur: OpenRouter's ~600 s non-streaming-limiet.* Met alle
+     caps weg nog steeds leeg na 606 s (gateway-timeout uitgesloten:
+     openrouter provider staat op 1200 s; de scaler is alleen een
+     advies-API). Operator-keuze: streaming. De fork HAD al een
+     streaming-pad (`_get_completion` + `_handle_streaming_response`) met
+     twee gates; beide pogingen om ze te openen faalden
+     traceerbaar: (a) toml-gate vereist custom_llm_provider — niet gezet
+     (`b7b8059` zet `config.custom_llm_provider: "openai"`); (b) de gate
+     checkt `kwargs["api_base"]`, maar onze api_base komt uit de
+     OPENAI.API_BASE-env — never set in kwargs. Definitieve fix: fork
+     `0a3f865c` maakt de statische streaming-lijst uitbreidbaar via
+     `config.additional_streaming_models`; de workflow opt de drie
+     tier-modellen in (`fc67997`).
+  Status aan het eind van de sessie: caretaker #16 run `40525353582` draait
+  ~16 min zonder empty-content (voorheen dood na 5-10 min) — de
+  afwachtende verificatie is gedelegeerd (subagent). De 400-fix en de
+  output-backstop zijn onafhankelijk bewezen (pr-piet-test #32: glm-override
+  groen, deepseek groen, `max_tokens=49152`→`131072` op de wire).
