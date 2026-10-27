@@ -473,7 +473,18 @@ jobs:
           # incl. capture_dispatch.py, terwijl het verdict "No major issues"
           # luidde. Context van beide tier-1-kandidaten = 1M → 128000 past ruim; tier-2
           # blijft bewust op 64000 (glm-5.2, second opinion).
-          config.max_model_tokens: "1048576"  # prompt budget = full 1M model context (operator 2026-10-04): diff clipping effectively off, full coverage. Output cap intentionally unset (provider max applies).
+          # Per-call prompt-budget. Bewust GEEN 1M meer (operator-idee
+          # 2026-10-27: "de PR in delen behandelen"): met 1M werd er nooit
+          # gechunked en moest één call een reuzen-diff in één keer
+          # doordenken — precies waar deepseek-v4.1's reasoning ontplofte.
+          # 131072 per call laat normale PR's (<131k tokens) ongemoeid en
+          # duwt alleen reuzen-PR's naar de chunk-flow hieronder.
+          config.max_model_tokens: "131072"
+          # Grote PR's in delen reviewen (fork-bestaat-al: get_pr_multi_diffs +
+          # merge_review_chunks). Elke chunk is een eigen, kleinere call met
+          # een eigen budget; de resultaten worden samengevoegd tot één review.
+          config.enable_large_pr_chunking: "true"
+          config.max_number_of_calls: "3"
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
