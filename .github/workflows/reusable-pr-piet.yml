@@ -428,6 +428,14 @@ jobs:
           # hun reasoning op grote PR's overleeft OpenRouter's ~600 s
           # non-streaming-muur niet (empty content, finish_reason length).
           config.additional_streaming_models: "deepseek/deepseek-v4.1-flash-1017,z-ai/glm-5.3,z-ai/glm-5.3-flash"
+          # deepseek-v4.1 redeneert op grote PR's onbegrensd (roll van 131k
+          # reasoning-tokens gemeten, caretaker #16) en eindigt op
+          # finish_reason length met lege content. Een reasoning-EFFORT is
+          # geen token-budget maar het inspanningsniveau van het model zelf:
+          # medium bindt de reasoning op ~28k tokens en daarna komt content
+          # (replay bewezen). litellm kent dit model niet, dus de fork
+          # moet hem hier expliciet als reasoning-model zien.
+          config.additional_reasoning_effort_models: "deepseek/deepseek-v4.1-flash-1017"
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
           # Harde output-begrenzing (fork-knop, ONLY tier-1): pr-agent stuurt
@@ -731,6 +739,14 @@ jobs:
           # hun reasoning op grote PR's overleeft OpenRouter's ~600 s
           # non-streaming-muur niet (empty content, finish_reason length).
           config.additional_streaming_models: "deepseek/deepseek-v4.1-flash-1017,z-ai/glm-5.3,z-ai/glm-5.3-flash"
+          # deepseek-v4.1 redeneert op grote PR's onbegrensd (roll van 131k
+          # reasoning-tokens gemeten, caretaker #16) en eindigt op
+          # finish_reason length met lege content. Een reasoning-EFFORT is
+          # geen token-budget maar het inspanningsniveau van het model zelf:
+          # medium bindt de reasoning op ~28k tokens en daarna komt content
+          # (replay bewezen). litellm kent dit model niet, dus de fork
+          # moet hem hier expliciet als reasoning-model zien.
+          config.additional_reasoning_effort_models: "deepseek/deepseek-v4.1-flash-1017"
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
           # Geen reasoning-budget — zelfde besluit als tier-1. Wél dezelfde
