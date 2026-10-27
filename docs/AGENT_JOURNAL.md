@@ -738,3 +738,26 @@
   via OpenRouter is onbetrouwbaar voor reuzen-PR's, ongeacht parameterisatie.
   De gebouwde infrastructuur (streaming-pad, backstop, fork-guards) blijft
   staan — die is model-onafhankelijk correct.
+
+- **Tier-1 default = `github-copilot/openai/gpt-6.1-sol` (2026-10-27,
+  operator-besluit "maak sol maar de default voor /review"; commit `2eb088c`).**
+  Aanleiding: deepseek-v4.1-flash-1017 faalde vijf keer op caretaker #16
+  (25+ min, `finish_reason: length`, lege content) terwijl sol **dezelfde PR**
+  in **2 min 17 s** volledig reviewde (run `40576834124`, review
+  `5673744864`, CHANGES_REQUESTED, 1 blocking bevinding op
+  `caretaker/comfy.py:577`). Bewust geaccepteerd: sol is **closed-weights** en
+  factureert op de Copilot-abonnement-quota (harde regel 1 herschreven).
+  De default gaat org-breed doorwerken — geen enkele caller overschrijft
+  `model_tier1` — dus inclusief de automatische reviews in alle 49 repo's.
+  **Temperatuur**: de parser leidt die af van de route
+  (`github-copilot/` → 1, verplicht voor de bridge, anders 400); het
+  default-pad doet géén catalog-resolve, dus `model_tier1` wordt letterlijk
+  gebruikt. E2E-bewijs: run `40579528088` op caretaker #16 (kaal `/review`,
+  geen override) → model-stap `model=openai/github-copilot/openai/gpt-6.1-sol,
+  override=false, temperature=1`, job 20:36:45→20:38:37Z (**1 min 52 s**),
+  review `20:38:29Z CHANGES_REQUESTED`.
+  **Chunking-experiment teruggedraaid** in dezelfde commit: de combinatie
+  prompt-budget 131072 + output-backstop 131072 faalde met `ValueError: The
+  required prompt leaves no input capacity for <model>`; met een capabel
+  model is chunking ook nergens voor nodig. De valkuil staat als waarschuwing
+  in de workflow-comment zodat een volgende poging niet dezelfde fout maakt.
