@@ -761,3 +761,26 @@
   required prompt leaves no input capacity for <model>`; met een capabel
   model is chunking ook nergens voor nodig. De valkuil staat als waarschuwing
   in de workflow-comment zodat een volgende poging niet dezelfde fout maakt.
+
+- **Seriële inhaal-sweep van gefaalde reviews (2026-10-27, operator-besluit
+  "kan je sol ook alle failed reviews laten doen, niet allemaal tegelijk").**
+  Inventarisatie: in plaats van runs af te lopen (workflow-ID's zijn per repo
+  verschillend — een scan met één hardcoded ID mist repo's) is de
+  **status-thread** de betrouwbare bron: die zegt letterlijk "review failed".
+  Van alle open PR's in de repos met PR-Piet-faalruns bleken er precies drie
+  een gefaalde review te hebben (de rest stond op "findings" = geslaagd).
+  Daarna strikt serieel (één tegelijk, wachten op `completed`, dan pas de
+  volgende), met een timeout van 25 min per PR:
+
+  | PR | head | resultaat |
+  |---|---|---|
+  | caretaker-llamacpp #15 | `b44166dc` | sol, CHANGES_REQUESTED, 2 blocking (~4,5 min) |
+  | guardian-llmprovider-gateway #33 | `738e7766` | sol, CHANGES_REQUESTED, 2 blocking (~3 min) |
+  | oelala #218 | `f6e58f2e` | sol, COMMENTED, geen bevindingen (~2 min) |
+
+  Alle drie op de juiste head, alle drie met `model github-copilot/openai/
+  gpt-6.1-sol` in de review-body; status-threads bijgewerkt. Geen APPROVE
+  (harde regel 8). Lessen: (1) de status-thread is de goedkoopste en meest
+  betrouwbare faal-detectie, niet de runs-API; (2) `gh api --jq` met `--arg`
+  in een `while`-lus faalde stil (review-telling werd "?"), dus verifieer
+  resultaten altijd apart na de sweep.
