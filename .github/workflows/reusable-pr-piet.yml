@@ -46,7 +46,7 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-25: deepseek/deepseek-v4.1-flash-1017 (1M context, live geverifieerd via /v1/models). Output: provider-max (geen cap); reasoning-cap via config.reasoning_max_tokens; een faal wordt rode run (harde regel 2)."
+        description: "Tier-1 model (open-weights, via gateway). Operator-besluit 2026-10-25: deepseek/deepseek-v4.1-flash-1017 (1M context, live geverifieerd via /v1/models). Output: provider-max (geen cap, geen reasoning-budget — operator-besluit 2026-10-27); een faal wordt rode run (harde regel 2)."
         required: false
         type: string
         default: "openai/deepseek/deepseek-v4.1-flash-1017"
@@ -427,18 +427,13 @@ jobs:
           # ~76 tok/s — ruim onder ai_timeout=900. Tier-2 krijgt deze knob
           # NIET (glm-5.2 provider-cap 16384, daar geen probleem waargenomen).
           # Reasoning-budget (fork-knop 3934878, ONLY tier-1): zonder dit
-          # kiest de provider zelf max-effort (geen cap = mandatory voor glm;
-          # deepseek-v4.1 redeneert zwaarder, dus de cap blijft hoe dan ook nodig)
-          # → 26-31k reasoning op zware PR's. Met 32000 is het denken gebonden
-          # (~7 min totaal) en stroomt content daarna vrij. Bewezen effectief
-          # via Z.AI: reasoning 8460 → 111/267 mét méér content.
-          config.reasoning_max_tokens: "32000"
-          # Expliciete output-cap: zonder deze past OpenRouter een lage
-          # provider-default toe en vreet het reasoning-budget die plek leeg
-          # (empty content, finish_reason: length — caretaker #15/#16,
-          # 2026-10-27). 49152 = budget 32000 + ~17k content-headroom; ruim
-          # onder de provider-caps (deepseek-v4.1: 393k, glm-5.3-flash: 943k).
-          config.max_output_tokens: "49152"
+          # GEEN reasoning-budget en GEEN output-cap meer (operator-besluit
+          # 2026-10-27: "geen budgetten, steeds weer te strak"). Gemeten zonder
+          # budget: het model stopt zelf (finish=stop, reasoning ~1-2k tokens,
+          # content stroomt — ook op ~30k-token prompts). De enige overgebleven
+          # garde is tijd (ai_timeout=900) en de provider-caps (393k/943k).
+          # Zie ook de fork-guard: een evt. reasoning-effort wordt overgeslagen
+          # zodra iemand ooit weer een token-budget configureert.
           # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
           # "Preparing review...", "No major issues detected", fail-comment):
           # de zakelijke output is uitsluitend onze formele review + status-thread.
@@ -711,13 +706,7 @@ jobs:
           config.temperature: ${{ steps.model.outputs.temperature }}
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
-          config.reasoning_max_tokens: "32000"
-          # Expliciete output-cap: zonder deze past OpenRouter een lage
-          # provider-default toe en vreet het reasoning-budget die plek leeg
-          # (empty content, finish_reason: length — caretaker #15/#16,
-          # 2026-10-27). 49152 = budget 32000 + ~17k content-headroom; ruim
-          # onder de provider-caps (deepseek-v4.1: 393k, glm-5.3-flash: 943k).
-          config.max_output_tokens: "49152"  # same as tier-1: read by the fork on openai/-compat routes (log line "Applying reasoning budget")
+          # Geen reasoning-budget / output-cap — zelfde besluit als tier-1.
           # pr-agent post NIETS meer op de PR (guide-comment, persistent comment,
           # "Preparing review...", "No major issues detected", fail-comment):
           # de zakelijke output is uitsluitend onze formele review + status-thread.
