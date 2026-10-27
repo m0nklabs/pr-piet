@@ -424,6 +424,10 @@ jobs:
           # litellm.force_streaming_custom_llm_provider ("openai") én een
           # api_base-substring (staat in config/.pr_agent.toml).
           config.custom_llm_provider: "openai"
+          # Stream deze modellen (fork: config.additional_streaming_models):
+          # hun reasoning op grote PR's overleeft OpenRouter's ~600 s
+          # non-streaming-muur niet (empty content, finish_reason length).
+          config.additional_streaming_models: "deepseek/deepseek-v4.1-flash-1017,z-ai/glm-5.3,z-ai/glm-5.3-flash"
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"
           # Harde output-begrenzing (fork-knop, ONLY tier-1): pr-agent stuurt
@@ -723,6 +727,10 @@ jobs:
           # litellm.force_streaming_custom_llm_provider ("openai") én een
           # api_base-substring (staat in config/.pr_agent.toml).
           config.custom_llm_provider: "openai"
+          # Stream deze modellen (fork: config.additional_streaming_models):
+          # hun reasoning op grote PR's overleeft OpenRouter's ~600 s
+          # non-streaming-muur niet (empty content, finish_reason length).
+          config.additional_streaming_models: "deepseek/deepseek-v4.1-flash-1017,z-ai/glm-5.3,z-ai/glm-5.3-flash"
           config.fallback_models: "[]"
           config.custom_model_max_tokens: "1048576"  # glm-5.3 context per OpenRouter metadata (1M); 131072 was a mix-up with the August route output cap
           # Geen reasoning-budget — zelfde besluit als tier-1. Wél dezelfde
