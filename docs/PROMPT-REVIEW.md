@@ -301,3 +301,46 @@ behaviour rather than wording.
 | `81b5c7f` | pr-piet | method-based `extra_instructions` (intent/achievement/trace/sweep/tests), noise suppression, project standards, evidence rule, scope fence; removed the non-executable dedupe instruction; `num_max_findings` 5 → 8 |
 | `f10c0099` | pr-agent (fork) | `{{ diff }}` without `|trim` — preserves indentation for `suggested_fix` |
 | `0fcb46b` | pr-piet | trust boundary (untrusted-data clause), do-not-invent-identifiers, missing-context protocol |
+
+## 10. Verdict policy change and the two lessons that came with it (2026-11-02)
+
+### Applied: only `[verified-bug]` blocks (commit `4716ad2`)
+
+Following the Codex rubric ("P0 only for universal issues that do not depend on
+any assumptions"), `verdict_from_review` now blocks on `[verified-bug]` only;
+`[hypothetical]`, `[backlog]`, `UNCERTAIN:` and **untagged** findings produce
+COMMENT. The untagged count is returned and logged as a `::warning::` so prompt
+non-compliance surfaces instead of being silently downgraded.
+
+### Lesson 1: the output schema beats `extra_instructions`
+
+The first measurement showed the model **never emitted the tag**: a correctly
+traced deadlock came back as `Event-loop deadlock`, and under the new rule that
+would have been silently non-blocking. Cause: the schema described the field as
+*"One or two word title for the issue. For example: 'Possible Bug', etc."*,
+which contradicts the instruction to prefix a tag. The model follows the output
+contract, not the prose.
+
+Fixed in the fork (`2b6d3ffe`) by moving the requirement into the
+`issue_header` description itself. Verified: `[verified-bug] Event-loop
+deadlock`, verdict `REQUEST_CHANGES — 1 verified blocking, 0 non-blocking, 0
+untagged` (run `41538505501`).
+
+**Rule for future prompt work: a requirement that constrains the output must
+live in the schema description, not only in `extra_instructions`.**
+
+### Lesson 2: the previous-findings port is inert in our architecture
+
+`render_previous_findings` is ported into the fork (`d3102e05`) and unit-tested
+(`tests/unittest/test_render_previous_findings.py`), and the prompt block is in
+place — but the block renders **empty in production**. Cause: the finding-state
+mechanism is gated on `config.publish_output`, and our workflow sets
+`config.publish_output: "false"` because `submit_review.py` posts the review
+itself. With publishing off, PR-Agent never writes its state marker, so there is
+nothing to read on the next run (`0` occurrences of a review-state marker in the
+job log).
+
+This is a structural decision, not a bug to patch silently: enabling the state
+means either letting PR-Agent publish its own comment again (the duplicate
+comment problem the operator rejected) or teaching `submit_review.py` to write
+the state marker into our own review body and teaching the fork to read it.
