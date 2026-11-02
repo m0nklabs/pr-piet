@@ -284,31 +284,49 @@ def extract_key_issues(review_data: dict) -> list:
 # wordt dan voorheen.
 # ---------------------------------------------------------------------------
 _NONBLOCKING_TAG_RE = re.compile(r"\[(hypothetical|backlog)\]", re.IGNORECASE)
+_VERIFIED_TAG_RE = re.compile(r"\[verified-bug\]", re.IGNORECASE)
 
 
-def _issue_is_nonblocking(issue: dict) -> bool:
-    """True als de bevinding expliciet als niet-blokkerend is geclassificeerd."""
+def _issue_is_verified(issue: dict) -> bool:
+    """True als de bevinding als geverifieerd is geclassificeerd.
+
+    Alleen ``[verified-bug]`` telt: de prompt definieert dat als "je hebt het
+    faalpad gevolgd en kunt het concrete trigger-scenario benoemen". Een
+    bevinding met een lage-confidence-marker (``UNCERTAIN: ...``) is per
+    definitie niet geverifieerd, ook als het label er toch op staat.
+    """
     header = (issue.get("issue_header") or "")
     content = (issue.get("issue_content") or "").strip()
-    if _NONBLOCKING_TAG_RE.search(header):
-        return True
-    # Fork-prompt-marker: bij lage confidence begint issue_content met
-    # "UNCERTAIN: ..." (Copilot-stijl: bevinding wél tonen, onzekerheid
-    # markeren).
-    return content[:120].lower().startswith("uncertain")
+    if not _VERIFIED_TAG_RE.search(header):
+        return False
+    return not content[:120].lower().startswith("uncertain")
 
 
-def verdict_from_review(review_data: dict) -> tuple[str, int, int]:
-    """Bepaal (event, #blocking, #non-blocking) uit de review-JSON.
+def verdict_from_review(review_data: dict) -> tuple[str, int, int, int]:
+    """Bepaal (event, #blocking, #non-blocking, #untagged) uit de review-JSON.
 
-    REQUEST_CHANGES zodra er minstens één blokkerende bevinding is
-    (verified-bug óf ongetagd — conservatief), anders COMMENT.
+    Operator-besluit 2026-11-02 (Codex-rubric, "P0 only for universal issues
+    that do not depend on any assumptions"): **alleen** ``[verified-bug]``
+    blokkeert een merge. ``[hypothetical]``, ``[backlog]``, ``UNCERTAIN:`` én
+    ongetagde bevindingen geven COMMENT.
+
+    Ongetagd is bewust niet-blokkerend: de prompt schrijft het label verplicht
+    voor, dus een ongetagde bevinding betekent dat het model zijn eigen
+    classificatie niet gaf — en dan mogen we niet namens hem blokkeren. Het
+    aantal ongetagde wordt teruggegeven zodat de caller prompt-non-compliance
+    kan loggen in plaats van hem stil te negeren.
     """
     issues = [i for i in extract_key_issues(review_data) if isinstance(i, dict)]
-    nonblocking = sum(1 for i in issues if _issue_is_nonblocking(i))
-    blocking = len(issues) - nonblocking
+    blocking = sum(1 for i in issues if _issue_is_verified(i))
+    untagged = sum(
+        1
+        for i in issues
+        if not _VERIFIED_TAG_RE.search(i.get("issue_header") or "")
+        and not _NONBLOCKING_TAG_RE.search(i.get("issue_header") or "")
+    )
+    nonblocking = len(issues) - blocking
     event = "REQUEST_CHANGES" if blocking else "COMMENT"
-    return event, blocking, nonblocking
+    return event, blocking, nonblocking, untagged
 
 
 def is_contentless_review(
@@ -373,8 +391,10 @@ def render_review_body(
     issues = [
         i for i in extract_key_issues(review_data or {}) if isinstance(i, dict)
     ]
-    blocking = [i for i in issues if not _issue_is_nonblocking(i)]
-    nonblocking = [i for i in issues if _issue_is_nonblocking(i)]
+    # Zelfde regel als verdict_from_review: alleen [verified-bug] is blokkerend,
+    # zodat de kop van de review-body nooit iets anders zegt dan het verdict.
+    blocking = [i for i in issues if _issue_is_verified(i)]
+    nonblocking = [i for i in issues if not _issue_is_verified(i)]
 
     if blocking:
         heading = "## PR-Piet review — changes requested"
@@ -422,7 +442,7 @@ def render_review_body(
                 where = f" — `{path}:{line_no}`"
             elif path:
                 where = f" — `{path}`"
-            tag = " (non-blocking)" if _issue_is_nonblocking(issue) else ""
+            tag = "" if _issue_is_verified(issue) else " (non-blocking)"
             lines.append(f"{idx}. **{header}**{tag}{where}")
             content = (issue.get("issue_content") or "").strip()
             for text_line in content.splitlines():
@@ -793,12 +813,20 @@ def main() -> int:
             # Verdict-gradering uit de review-JSON (zie verdict_from_review):
             # REQUEST_CHANGES alleen bij blokkerende bevindingen (verified-bug
             # of ongetagd); alle hypothetical/backlog/UNCERTAIN -> COMMENT.
-            event, n_block, n_nonblock = verdict_from_review(review_data)
+            event, n_block, n_nonblock, n_untagged = verdict_from_review(review_data)
             print(
-                f"(verdict: {event} — {n_block} blocking, {n_nonblock} "
-                f"hypothetical/backlog/UNCERTAIN)",
+                f"(verdict: {event} — {n_block} verified blocking, {n_nonblock} "
+                f"non-blocking, {n_untagged} untagged)",
                 file=sys.stderr,
             )
+            if n_untagged:
+                # Prompt-non-compliance zichtbaar maken i.p.v. stilzwijgend
+                # niet-blokkerend behandelen: het label is verplicht.
+                print(
+                    f"::warning::{n_untagged} finding(s) without a classification "
+                    "tag; treated as non-blocking",
+                    file=sys.stderr,
+                )
         elif comments:
             # 2-call-modus suggesties zonder review-JSON: suggesties zijn geen
             # geverifieerde bugs -> COMMENT (was REQUEST_CHANGES).

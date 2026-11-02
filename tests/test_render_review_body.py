@@ -28,8 +28,10 @@ CANDY = [
     "🔵",
 ]
 
+# Sinds het operator-besluit van 2026-11-02 blokkeert alleen [verified-bug];
+# een ongetagde bevinding is non-blocking (zie tests/test_verdict.py).
 BLOCKING = {
-    "issue_header": "Off-by-one in chunked() step",
+    "issue_header": "[verified-bug] Off-by-one in chunked() step",
     "issue_content": "range(0, len(items), size + 1) skips the last chunk.",
     "relevant_file": "text_utils.py",
     "start_line": 25,
@@ -48,7 +50,23 @@ def data(*issues: dict) -> dict:
     return {"review": {"key_issues_to_review": list(issues)}}
 
 
+UNTAGGED = {
+    "issue_header": "Off-by-one in chunked() step",
+    "issue_content": "range(0, len(items), size + 1) skips the last chunk.",
+    "relevant_file": "text_utils.py",
+    "start_line": 25,
+    "end_line": 25,
+}
+
+
 class TestRenderReviewBody(unittest.TestCase):
+    def test_untagged_finding_is_non_blocking(self):
+        """Policy 2026-11-02: an unclassified finding must not block a merge."""
+        body = render_review_body(data(UNTAGGED), HEAD)
+        self.assertIn("## PR-Piet review — non-blocking findings", body)
+        self.assertIn("0 blocking", body)
+        self.assertIn("(non-blocking)", body)
+
     def test_blocking_findings_heading_and_detail(self):
         body = render_review_body(data(BLOCKING), HEAD)
         self.assertIn("## PR-Piet review — changes requested", body)
