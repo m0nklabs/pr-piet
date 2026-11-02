@@ -244,15 +244,29 @@ The third finding is the significant one: naming *why* the test is worthless
 falsification argument, not a style opinion — that behaviour comes from the new
 TESTS step and the EVIDENCE rule.
 
-### 7b. Still to verify
+### 7b. No-false-positive guard (done)
+
+A checklist can also *invent* items to tick, so the opposite direction was
+tested: [`pr-piet-test#34`](https://github.com/m0nklabs/pr-piet-test/pull/34)
+adds a deliberately correct, well-tested bounded-retry helper (real assertions,
+parametrised edge cases, injected sleep). Result: **`no findings`**,
+`COMMENTED`, *"No blocking issues were found in the changed files."*
+So the dimension sweep does not manufacture findings on sound code.
+
+Both directions are now measured: three planted defects → three findings;
+one clean change → zero findings.
+
+### 7c. Still to verify
 
 1. Unit tests green: **82 passed** after every change in this document.
-2. No-false-positive guard: a clean PR must still produce no findings. Not yet
-   re-verified after the dimension sweep was added — the risk of a checklist is
-   that it *invents* items to tick.
-3. Regression comparison on the same three heads (`caretaker #15`,
+2. Regression comparison on the same three heads (`caretaker #15`,
    `guardian #33`, `oelala #218`): a prompt change that turns previously found
-   blocking issues into silence is a regression, not an improvement.
+   blocking issues into silence is a regression, not an improvement. Not run —
+   two of those heads have since moved on.
+3. Instruction dilution: the prompt grew from 13 lines / 1107 chars to 31 lines
+   / 4088 chars. The two E2E results above say it still behaves, but a longer
+   instruction block competes for attention; keep future additions justified by
+   a measured miss, not by a good idea.
 
 ## 8. Fork-level work this analysis exposes (not done here)
 
