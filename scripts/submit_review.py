@@ -139,6 +139,107 @@ def find_reviews_for_head(
     return found
 
 
+# ---------------------------------------------------------------------------
+# Finding state: eerdere bevindingen teruggeven aan de volgende run.
+#
+# Waarom in onze eigen review-body: pr-agent's eigen finding-state is gegated
+# op config.publish_output, en die staat bij ons op false omdat dit script de
+# review post. Zonder eigen state ziet het model nooit eerdere bevindingen en
+# is elke dedupe-instructie in de prompt onuitvoerbaar (gemeten 2026-11-02).
+# De fork leest deze marker uit de nieuwste bot-review en rendert hem in de
+# prompt (pr_reviewer._load_previous_findings_context).
+# ---------------------------------------------------------------------------
+
+FINDINGS_STATE_MARKER = "pr-piet-findings:v1"
+_FINDINGS_STATE_RE = re.compile(
+    r"<!--\s*" + FINDINGS_STATE_MARKER + r"\s*(\{.*?\})\s*-->", re.DOTALL
+)
+_MAX_STATE_FINDINGS = 20
+_MAX_STATE_CONTENT = 400
+
+
+def _finding_key(issue: dict) -> str:
+    """Stabiele identiteit: bestand + header (regels verschuiven per commit)."""
+    path = (issue.get("relevant_file") or "").strip()
+    header = (issue.get("issue_header") or "").strip()
+    return f"{path}::{header}"
+
+
+def _state_entry(issue: dict, state: str) -> dict:
+    content = (issue.get("issue_content") or "").strip()
+    if len(content) > _MAX_STATE_CONTENT:
+        content = content[:_MAX_STATE_CONTENT].rstrip() + "…"
+    return {
+        "id": _finding_key(issue),
+        "state": state,
+        "path": (issue.get("relevant_file") or "").strip(),
+        "start_line": issue.get("start_line"),
+        "end_line": issue.get("end_line"),
+        "header": (issue.get("issue_header") or "").strip(),
+        "content": content,
+    }
+
+
+def parse_findings_state(body: str) -> list[dict]:
+    """Lees de finding-state uit een review-body; lege lijst als er niets staat."""
+    match = _FINDINGS_STATE_RE.search(body or "")
+    if not match:
+        return []
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return []
+    findings = payload.get("findings") if isinstance(payload, dict) else None
+    return [f for f in findings if isinstance(f, dict)] if isinstance(findings, list) else []
+
+
+def latest_findings_state(repo: str, pr_number: str, token: str) -> list[dict]:
+    """Finding-state uit de nieuwste bot-review die er een bevat."""
+    page = 1
+    newest: list[dict] = []
+    while True:
+        url = f"{API}/repos/{repo}/pulls/{pr_number}/reviews?per_page=100&page={page}"
+        reviews = _request("GET", url, token)
+        if not isinstance(reviews, list):
+            break
+        for rv in reviews:
+            if not (rv.get("user") or {}).get("login", "").endswith("[bot]"):
+                continue
+            findings = parse_findings_state(rv.get("body") or "")
+            if findings:
+                newest = findings  # reviews komen oud -> nieuw; laatste wint
+        if len(reviews) < 100:
+            break
+        page += 1
+    return newest
+
+
+def build_findings_state(current_issues: list[dict], previous: list[dict]) -> list[dict]:
+    """Nieuwe state: huidige bevindingen actief, verdwenen eerdere gemarkeerd resolved.
+
+    Een bevinding die in deze run niet meer gevonden wordt, is niet automatisch
+    opgelost — de diff kan smaller zijn. Daarom blijft de status ``resolved``
+    informatief: de prompt zegt expliciet dat een resolved finding alleen
+    opnieuw gemeld mag worden als de code hem herintroduceert.
+    """
+    current = [_state_entry(i, "active") for i in current_issues if isinstance(i, dict)]
+    current_keys = {entry["id"] for entry in current}
+    resolved = [
+        {**entry, "state": "resolved"}
+        for entry in previous
+        if entry.get("id") not in current_keys and entry.get("state") != "resolved"
+    ]
+    return (current + resolved)[:_MAX_STATE_FINDINGS]
+
+
+def findings_state_marker(findings: list[dict]) -> str:
+    """HTML-comment met de state; onzichtbaar in de gerenderde review."""
+    if not findings:
+        return ""
+    payload = json.dumps({"findings": findings}, ensure_ascii=False, separators=(",", ":"))
+    return f"<!-- {FINDINGS_STATE_MARKER} {payload} -->"
+
+
 def already_reviewed(repo: str, pr_number: str, token: str, commit_sha: str) -> bool:
     """True als er al een formele bot-review op deze head staat (elke leeftijd)."""
     return bool(find_reviews_for_head(repo, pr_number, token, commit_sha))
@@ -937,6 +1038,27 @@ def main() -> int:
     # 4d. Marker in de review-body zodat latere runs de review herkennen.
     if body and commit_sha:
         body = body.rstrip() + "\n\n" + _review_marker(commit_sha)
+
+    # 4e. Finding-state meesturen zodat de VOLGENDE run de eerdere bevindingen
+    # kent (de fork rendert ze in de prompt). Alleen bij een verse review-JSON:
+    # een fallback-body herhaalt oude tekst en zou de state vervuilen.
+    if body and review_data is not None:
+        try:
+            previous_state = latest_findings_state(repo, args.pr_number, token)
+            state = build_findings_state(
+                [i for i in extract_key_issues(review_data) if isinstance(i, dict)],
+                previous_state,
+            )
+            marker = findings_state_marker(state)
+            if marker:
+                body = body.rstrip() + "\n\n" + marker
+                print(
+                    f"(finding-state: {sum(1 for f in state if f['state'] == 'active')} active, "
+                    f"{sum(1 for f in state if f['state'] == 'resolved')} resolved)",
+                    file=sys.stderr,
+                )
+        except Exception as error:  # noqa: BLE001 - state is een extraatje, nooit fataal
+            print(f"::warning::finding-state niet weggeschreven: {error}", file=sys.stderr)
 
     # 5. POST review
     payload: dict = {"event": event}
