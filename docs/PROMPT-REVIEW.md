@@ -393,3 +393,35 @@ This is **not** a safe no-op: it activates every setting in the file at once —
 `num_max_findings=8`, the whole prompt, and the `[pr_code_suggestions]` /
 `[pr_description]` sections too. That changes behaviour for all 49 calling
 repos, so it needs an explicit decision rather than a quiet commit.
+
+### Resolution and verification (2026-11-03, run `41602209154`)
+
+`config.extra_config_url` is now exported by both tiers, so the file is applied.
+`review_heading` moved out of the shared toml into per-tier env (one file serves
+both tiers), and `submit_review.py` derives the incremental heading from
+`--heading` instead of a hardcoded constant, so the comment lookup keeps working
+after the heading changes.
+
+Verified in a real run on `pr-piet-test#37`:
+
+| Check | Result |
+|---|---|
+| `Applied extra settings from …` in the log | ✅ |
+| `num_max_findings` in the config dump | **8** (was 3) |
+| Method prompt in the rendered prompt (`SCOPE FENCE` / `TRUST BOUNDARY`) | ✅ present |
+| Review posted (heading lookup still works) | ✅ `CHANGES_REQUESTED`, 2 blocking |
+| Findings tagged | ✅ `[verified-bug] Unset configuration`, `[verified-bug] Missing assertion` |
+| Verdict | `REQUEST_CHANGES — 2 verified blocking, 0 non-blocking, 0 untagged` |
+| Finding state written | ✅ `(finding-state: 2 active, 0 resolved)` |
+| Next run reads it back | ✅ `Findings from earlier reviews of this PR` in the prompt, with the exact prior headers |
+
+The first finding also shows the method working as designed: *"This PR aims to
+add an environment-backed retry-limit accessor and test it. The accessor is
+implemented, but the supplied caller … does not set `PRPIET_RETRY_LIMIT`. In an
+environment without that variable, the call raises `KeyError`"* — intent,
+achievement and trace in one finding.
+
+**Correction to §7a:** the earlier E2E on `pr-piet-test#33` was attributed to the
+new method prompt. It was not — the toml was inert at that point, so that result
+came from the base upstream prompt plus the model. The method prompt only
+reached the model from run `41602209154` onward.

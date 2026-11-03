@@ -115,9 +115,18 @@ doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
 ```
 
 Config-hiërarchie voor pr-agent (laag → hoog):
-`built-in defaults` → `PR_AGENT_EXTRA_CONFIG_URL` (= onze
-`config/.pr_agent.toml`) → repo-local `.pr_agent.toml` (doel-repo, indien
-aanwezig) → workflow-env (`config.model`, `OPENAI.KEY`, ...).
+`built-in defaults` → extra config (`config/.pr_agent.toml`) → repo-local
+`.pr_agent.toml` (doel-repo, indien aanwezig) → workflow-env (`config.model`,
+`OPENAI.KEY`, ...).
+
+**LET OP (bewezen 2026-11-02/03):** de env-var `PR_AGENT_EXTRA_CONFIG_URL`
+werkt NIET in de Action-route — alleen `cli.py` zet `CONFIG.EXTRA_CONFIG_URL`,
+de runner nooit. Zonder `config.extra_config_url` in de step-env is ons hele
+`config/.pr_agent.toml` inert (dat was maanden zo: `extra_instructions` leeg,
+`num_max_findings` 3). Beide tiers zetten die env nu expliciet. `review_heading`
+staat bewust NIET in de gedeelde toml maar per tier in de workflow, en
+`submit_review.py --heading` krijgt dezelfde string — daar zoekt het script de
+pr-agent-comment op terug.
 
 ## Belangrijke feiten (geverifieerd, niet opnieuw uitzoeken)
 
