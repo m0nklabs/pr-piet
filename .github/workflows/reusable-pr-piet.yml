@@ -487,6 +487,12 @@ jobs:
           # Begrens de AGENTS.md-repo-context van doel-repos (sommige zijn
           # honderden KB); de PR-Piet repo-map is de primaire context.
           config.repo_context_max_lines: "300"
+          # Onze config/.pr_agent.toml wordt anders NOOIT toegepast: pr-agent
+          # leest CONFIG.EXTRA_CONFIG_URL, maar alleen cli.py zet die — de
+          # Action-runner niet (bewezen 2026-11-02: extra_instructions was leeg,
+          # num_max_findings 3 i.p.v. 8). Via config.* env landt hij wél.
+          config.extra_config_url: "/github/workspace/.pr_piet/.pr_agent.toml"
+          config.review_heading: "PR-Piet Review (tier 1)"
           config.response_language: ${{ inputs.response_language }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: ${{ inputs.auto_describe }}
@@ -538,7 +544,7 @@ jobs:
           fi
           python3 pr-piet/scripts/submit_review.py \
             --pr-number "${{ inputs.pr_number }}" \
-            --heading "PR Reviewer Guide" \
+            --heading "PR-Piet Review (tier 1)" \
             --since "${{ steps.ts.outputs.since }}" \
             --model "${{ steps.model.outputs.model_label }}" \
             ${json_arg} \
@@ -772,6 +778,8 @@ jobs:
           config.ai_timeout: "900"
           config.large_patch_policy: "clip"
           config.repo_context_max_lines: "300"
+          config.extra_config_url: "/github/workspace/.pr_piet/.pr_agent.toml"
+          config.review_heading: "PR-Piet Review (tier 2)"
           config.response_language: ${{ inputs.response_language }}
           # Second opinion mét Apply-knoppen: de fork-prompt levert dan per
           # bevinding een suggested_fix-veld (E2E-nuance 2026-10-03: zonder
@@ -810,7 +818,7 @@ jobs:
           fi
           python3 pr-piet/scripts/submit_review.py \
             --pr-number "${{ inputs.pr_number }}" \
-            --heading "PR Reviewer Guide" \
+            --heading "PR-Piet Review (tier 2)" \
             --since "${{ steps.ts.outputs.since }}" \
             --model "${{ steps.model.outputs.model_label }}" \
             ${json_arg} \

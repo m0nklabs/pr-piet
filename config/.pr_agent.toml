@@ -55,9 +55,11 @@ ignore_pr_labels = []
 ignore_pr_authors = []
 
 [pr_reviewer]
-# Aparte heading per tier, zodat tier-1 en tier-2 comments herkenbaar zijn
-# en persistent_comment ze niet door elkaar haalt.
-review_heading = "PR-Piet Review (tier 1)"
+# review_heading staat NIET hier maar per tier in de workflow
+# (config.review_heading): de toml wordt door beide tiers gedeeld, dus een
+# waarde hier zou tier 2 het label van tier 1 geven. De workflow geeft dezelfde
+# string ook aan submit_review.py --heading, want dat zoekt de pr-agent-comment
+# erop terug.
 persistent_comment = true
 publish_output_no_suggestions = true
 # 8 i.p.v. de upstream-default 3/5: de prompt vraagt letterlijk om "(0-8

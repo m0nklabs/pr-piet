@@ -459,19 +459,24 @@ def is_contentless_review(
 # volledige review.
 PR_REVIEW_IDENTITY_FULL = "<!-- pr-agent:review:full -->"
 PR_REVIEW_IDENTITY_INCREMENTAL = "<!-- pr-agent:review:incremental -->"
-INCREMENTAL_HEADING = "Incremental PR Reviewer Guide"
+DEFAULT_REVIEW_HEADING = "PR Reviewer Guide"
 
 
-def identity_for_body(raw_body: str) -> str:
+def identity_for_body(raw_body: str, heading: str = DEFAULT_REVIEW_HEADING) -> str:
     """Kies de pr-agent-identity-marker op basis van de verse review-comment.
 
-    Een incrementele review ('## Incremental PR Reviewer Guide') krijgt de
+    Een incrementele review ('## Incremental <heading>') krijgt de
     incremental-marker, al het andere de full-marker. Zo blijft de fork het
     anker correct classificeren wanneer hij onze formele reviews scant.
+
+    De heading is configureerbaar (`pr_reviewer.review_heading`), dus de
+    incrementele variant wordt afgeleid in plaats van hardcoded: anders breekt
+    de detectie zodra een deployment een eigen heading zet.
     """
+    incremental_heading = f"Incremental {heading}"
     return (
         PR_REVIEW_IDENTITY_INCREMENTAL
-        if INCREMENTAL_HEADING in (raw_body or "")
+        if incremental_heading in (raw_body or "")
         else PR_REVIEW_IDENTITY_FULL
     )
 
@@ -1032,7 +1037,7 @@ def main() -> int:
         # krijgt de incremental-marker, anders de full-marker (fork-patch #6
         # gebruikt die om het incrementele anker in formele reviews te vinden).
         body = render_review_body(
-            review_data, commit_sha, identity_for_body(body), args.model
+            review_data, commit_sha, identity_for_body(body, args.heading), args.model
         )
 
     # 4d. Marker in de review-body zodat latere runs de review herkennen.
