@@ -344,3 +344,52 @@ This is a structural decision, not a bug to patch silently: enabling the state
 means either letting PR-Agent publish its own comment again (the duplicate
 comment problem the operator rejected) or teaching `submit_review.py` to write
 the state marker into our own review body and teaching the fork to read it.
+
+## 11. Blocking discovery (2026-11-02, run `41554897712`): `config/.pr_agent.toml` is never applied
+
+The config dump in a real tier-1 job shows the **defaults**, not our file:
+
+| Setting | Our `config/.pr_agent.toml` | Actual value in the run |
+|---|---|---|
+| `pr_reviewer.extra_instructions` | the full method prompt | **`""`** |
+| `pr_reviewer.num_max_findings` | `8` | **`3`** |
+| `pr_reviewer.review_heading` | `"PR-Piet Review (tier 1)"` | **`"PR Reviewer Guide"`** |
+
+Meanwhile everything the **workflow sets as `config.*` env** does apply —
+`ai_timeout=900`, `max_output_tokens=131072`, `max_model_tokens=1048576`,
+`large_patch_policy=clip`, `repo_context_max_lines=300` are all present.
+
+### Root cause
+
+`apply_repo_settings()` applies the extra config only when
+`get_settings().get("CONFIG.EXTRA_CONFIG_URL")` is set
+(`pr_agent/git_providers/utils.py:251`). That key is written in exactly one
+place: `pr_agent/cli.py:217`, the **CLI** entry point. The GitHub Action runner
+never sets it, so `PR_AGENT_EXTRA_CONFIG_URL` — which our workflow does export —
+is read by nobody. `envvar_prefix=False` and the dotted env names are why the
+`config.*` workflow values do land.
+
+### Consequences (all earlier claims that depended on the toml)
+
+- The method prompt, the classification-tag instruction, the trust boundary, the
+  evidence rule, the scope fence and the missing-context protocol **never reached
+  the model**. The behaviour observed on `pr-piet-test#33` came from the base
+  upstream prompt plus the model, not from our text.
+- `num_max_findings = 8` (and the earlier `5`) never applied; it has always been 3.
+- The fork-side changes **are** live, because they edit the prompt file that
+  ships inside the image: the `issue_header` tag requirement (`2b6d3ffe`), the
+  previous-findings block (`d3102e05`/`c5ec13fe`) and the untrusted artifact
+  section (`ce462283`).
+
+### Fix (one line per tier, but it activates a lot at once)
+
+Add `config.extra_config_url: "/github/workspace/.pr_piet/.pr_agent.toml"` to the
+tier step env. `config.*` env values demonstrably reach the settings object, so
+this populates `CONFIG.EXTRA_CONFIG_URL` and `apply_repo_settings()` will then
+merge our file.
+
+This is **not** a safe no-op: it activates every setting in the file at once —
+`review_heading`, `persistent_comment`, `require_tests_review`,
+`num_max_findings=8`, the whole prompt, and the `[pr_code_suggestions]` /
+`[pr_description]` sections too. That changes behaviour for all 49 calling
+repos, so it needs an explicit decision rather than a quiet commit.
