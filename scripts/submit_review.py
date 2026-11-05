@@ -193,6 +193,129 @@ def parse_findings_state(body: str) -> list[dict]:
     return [f for f in findings if isinstance(f, dict)] if isinstance(findings, list) else []
 
 
+def cleanup_allowed(review_data: dict | None, n_block: int, since: str | None) -> bool:
+    """Mag deze run vervallen bezwaren intrekken?
+
+    Drie voorwaarden, alle drie nodig:
+    - er is een review-JSON (zonder verdict valt er niets te bewijzen);
+    - die JSON bevat nul blokkerende bevindingen;
+    - het is een VOLLEDIGE review (geen ``--since``): een incrementele run
+      beoordeelt alleen de nieuwe diff, dus "geen bevindingen" zegt daar niets
+      over een ouder, nog openstaand bezwaar.
+    """
+    return review_data is not None and n_block == 0 and not since
+
+
+def maybe_cleanup(
+    review_data: dict | None,
+    n_block: int,
+    since: str | None,
+    repo: str,
+    pr_number: str,
+    token: str,
+    current_sha: str,
+) -> list[int]:
+    """Ruim vervallen bezwaren op als deze run een bewezen schone review deed.
+
+    Eén ingang voor beide succes-paden (normale POST en de 422-retry), zodat geen
+    van beide een variabele leest die later pas wordt gezet.
+    """
+    if not cleanup_allowed(review_data, n_block, since):
+        return []
+    try:
+        return dismiss_superseded_changes_requested(
+            repo, pr_number, token, current_sha
+        )
+    except Exception as error:  # noqa: BLE001 - opruimen mag de review nooit breken
+        print(f"::warning::kon vervallen review niet intrekken: {error}", file=sys.stderr)
+        return []
+
+
+def _is_ancestor(repo: str, token: str, older_sha: str, newer_sha: str) -> bool:
+    """Is ``older_sha`` een voorouder van ``newer_sha``?
+
+    SHA-ongelijkheid bewijst geen vervallen-oordeel: een schone run voor head A
+    kan eindigen nadat een andere run CHANGES_REQUESTED postte op de nieuwere
+    head B. Alleen als de review-commit echt in de geschiedenis van de schoon
+    bevonden head zit, is het bezwaar vervallen.
+    """
+    if not older_sha or not newer_sha or older_sha == newer_sha:
+        return False
+    try:
+        cmp = _request(
+            "GET", f"{API}/repos/{repo}/compare/{older_sha}...{newer_sha}", token
+        )
+    except Exception:  # noqa: BLE001 - onbekend is niet vervallen
+        return False
+    return (cmp or {}).get("status") in ("ahead", "identical")
+
+
+def dismiss_superseded_changes_requested(
+    repo: str, pr_number: str, token: str, current_sha: str
+) -> list[int]:
+    """Trek onze eigen CHANGES_REQUESTED in die op een oudere head staan.
+
+    GitHub's review-decision is plakkerig: een latere COMMENT-review wist een
+    eerdere CHANGES_REQUESTED niet. Omdat PR-Piet nooit APPROVE post (harde
+    regel 8) blijft zo'n blokkade dus eeuwig staan — ook nadat de bevinding is
+    gefixt en de nieuwe head schoon terugkomt. De mens moest dat tot nu toe met
+    de hand wegklikken (gemeten op #227, #228, #236 en #239 in oelala).
+
+    Daarom laat de bot hier zijn *eigen* vervallen oordeel intrekken. Nooit een
+    review op de huidige head (dat is een levend bezwaar) en nooit die van
+    iemand anders.
+    """
+    if not current_sha:
+        return []
+    # Alleen ons eigen oordeel: de identiteit die deze review post. Een andere
+    # bot (of een mens) heeft hier niets te zoeken.
+    try:
+        me = (_request("GET", f"{API}/user", token) or {}).get("login") or ""
+    except Exception:  # noqa: BLE001 - zonder identiteit liever niets doen
+        me = ""
+    if not me:
+        return []
+    dismissed: list[int] = []
+    page = 1
+    while True:
+        url = f"{API}/repos/{repo}/pulls/{pr_number}/reviews?per_page=100&page={page}"
+        reviews = _request("GET", url, token)
+        if not isinstance(reviews, list):
+            break
+        for rv in reviews:
+            if (rv.get("user") or {}).get("login", "") != me:
+                continue
+            if rv.get("state") != "CHANGES_REQUESTED":
+                continue
+            review_sha = rv.get("commit_id") or ""
+            if review_sha == current_sha:
+                continue  # levend bezwaar op deze head: blijft staan
+            if not _is_ancestor(repo, token, review_sha, current_sha):
+                # Niet aantoonbaar ouder (bv. een parallelle run op een nieuwere
+                # head): laat staan.
+                continue
+            review_id = rv.get("id")
+            if not review_id:
+                continue
+            _request(
+                "PUT",
+                f"{API}/repos/{repo}/pulls/{pr_number}/reviews/{review_id}/dismissals",
+                token,
+                {
+                    "message": (
+                        "Superseded: a later head was reviewed and came back clean. "
+                        "Withdrawn by PR-Piet so the merge gate reflects the current head."
+                    ),
+                    "event": "DISMISS",
+                },
+            )
+            dismissed.append(review_id)
+        if len(reviews) < 100:
+            break
+        page += 1
+    return dismissed
+
+
 def latest_findings_state(repo: str, pr_number: str, token: str) -> list[dict]:
     """Finding-state uit de nieuwste bot-review die er een bevat."""
     page = 1
@@ -914,6 +1037,12 @@ def main() -> int:
 
     # 3. Event bepalen
     event = args.event
+    # Blokkerend-aantal onafhankelijk van het gevraagde event: met een expliciet
+    # --event COMMENT wordt de auto-verdict-tak hieronder overgeslagen, en dan
+    # mag de opruiming niet doorgaan terwijl de JSON een blocking finding bevat.
+    n_block = 0
+    if review_data is not None:
+        _, n_block, _, _ = verdict_from_review(review_data)
     if event == "auto":
         if review_data is not None:
             # Verdict-gradering uit de review-JSON (zie verdict_from_review):
@@ -1095,12 +1224,29 @@ def main() -> int:
                 )
                 print(result.get("html_url", "(geen url)"))
                 print("(inline comments overgeslagen: locaties niet in diff)", file=sys.stderr)
+                maybe_cleanup(
+                    review_data, n_block, args.since, repo, args.pr_number, token, commit_sha
+                )
                 return 0
             except RuntimeError as exc2:  # noqa: BLE001
                 print(f"review zonder comments mislukt ook: {exc2}", file=sys.stderr)
         return 1
 
     print(result.get("html_url", "(geen url in response)"))
+
+    # 6. Ons eigen vervallen bezwaar opruimen (zie de functie hierboven).
+    # Alleen bij een bewezen schone, VOLLEDIGE review: een incrementele run
+    # (--since) beoordeelt alleen de nieuwe diff, dus "geen bevindingen" zegt
+    # daar niets over een ouder, nog openstaand bezwaar.
+    dismissed = maybe_cleanup(
+        review_data, n_block, args.since, repo, args.pr_number, token, commit_sha
+    )
+    if dismissed:
+        print(
+            f"(superseded CHANGES_REQUESTED ingetrokken: {dismissed})",
+            file=sys.stderr,
+        )
+
     return 0
 
 
