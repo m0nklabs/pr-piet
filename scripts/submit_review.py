@@ -206,6 +206,31 @@ def cleanup_allowed(review_data: dict | None, n_block: int, since: str | None) -
     return review_data is not None and n_block == 0 and not since
 
 
+def maybe_cleanup(
+    review_data: dict | None,
+    n_block: int,
+    since: str | None,
+    repo: str,
+    pr_number: str,
+    token: str,
+    current_sha: str,
+) -> list[int]:
+    """Ruim vervallen bezwaren op als deze run een bewezen schone review deed.
+
+    Eén ingang voor beide succes-paden (normale POST en de 422-retry), zodat geen
+    van beide een variabele leest die later pas wordt gezet.
+    """
+    if not cleanup_allowed(review_data, n_block, since):
+        return []
+    try:
+        return dismiss_superseded_changes_requested(
+            repo, pr_number, token, current_sha
+        )
+    except Exception as error:  # noqa: BLE001 - opruimen mag de review nooit breken
+        print(f"::warning::kon vervallen review niet intrekken: {error}", file=sys.stderr)
+        return []
+
+
 def _is_ancestor(repo: str, token: str, older_sha: str, newer_sha: str) -> bool:
     """Is ``older_sha`` een voorouder van ``newer_sha``?
 
@@ -849,12 +874,6 @@ def main() -> int:
     if args.review_json:
         try:
             review_data = load_review_json(args.review_json)
-            # Blokkerend-aantal onafhankelijk van het gevraagde event: met
-            # --event COMMENT wordt de auto-verdict-tak overgeslagen, en dan mag
-            # de opruiming niet doorgaan terwijl de JSON een blocking finding
-            # bevat.
-            if review_data is not None:
-                _, n_block, _, _ = verdict_from_review(review_data)
         except Exception as exc:  # noqa: BLE001
             print(f"kon review-JSON niet laden ({args.review_json}): {exc}",
                   file=sys.stderr)
@@ -1018,7 +1037,12 @@ def main() -> int:
 
     # 3. Event bepalen
     event = args.event
+    # Blokkerend-aantal onafhankelijk van het gevraagde event: met een expliciet
+    # --event COMMENT wordt de auto-verdict-tak hieronder overgeslagen, en dan
+    # mag de opruiming niet doorgaan terwijl de JSON een blocking finding bevat.
     n_block = 0
+    if review_data is not None:
+        _, n_block, _, _ = verdict_from_review(review_data)
     if event == "auto":
         if review_data is not None:
             # Verdict-gradering uit de review-JSON (zie verdict_from_review):
@@ -1200,16 +1224,9 @@ def main() -> int:
                 )
                 print(result.get("html_url", "(geen url)"))
                 print("(inline comments overgeslagen: locaties niet in diff)", file=sys.stderr)
-                if clean_verdict:
-                    try:
-                        dismiss_superseded_changes_requested(
-                            repo, args.pr_number, token, commit_sha
-                        )
-                    except Exception as error:  # noqa: BLE001
-                        print(
-                            f"::warning::kon vervallen review niet intrekken: {error}",
-                            file=sys.stderr,
-                        )
+                maybe_cleanup(
+                    review_data, n_block, args.since, repo, args.pr_number, token, commit_sha
+                )
                 return 0
             except RuntimeError as exc2:  # noqa: BLE001
                 print(f"review zonder comments mislukt ook: {exc2}", file=sys.stderr)
@@ -1221,22 +1238,14 @@ def main() -> int:
     # Alleen bij een bewezen schone, VOLLEDIGE review: een incrementele run
     # (--since) beoordeelt alleen de nieuwe diff, dus "geen bevindingen" zegt
     # daar niets over een ouder, nog openstaand bezwaar.
-    clean_verdict = cleanup_allowed(review_data, n_block, args.since)
-    if clean_verdict:
-        try:
-            dismissed = dismiss_superseded_changes_requested(
-                repo, args.pr_number, token, commit_sha
-            )
-            if dismissed:
-                print(
-                    f"(superseded CHANGES_REQUESTED ingetrokken: {dismissed})",
-                    file=sys.stderr,
-                )
-        except Exception as error:  # noqa: BLE001 - opruimen mag de review nooit breken
-            print(
-                f"::warning::kon vervallen review niet intrekken: {error}",
-                file=sys.stderr,
-            )
+    dismissed = maybe_cleanup(
+        review_data, n_block, args.since, repo, args.pr_number, token, commit_sha
+    )
+    if dismissed:
+        print(
+            f"(superseded CHANGES_REQUESTED ingetrokken: {dismissed})",
+            file=sys.stderr,
+        )
 
     return 0
 

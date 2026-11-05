@@ -150,5 +150,55 @@ class CleanVerdictGateTests(unittest.TestCase):
         )
 
 
+class MaybeCleanupTests(unittest.TestCase):
+    """Eén ingang voor beide succes-paden (normale POST en de 422-retry)."""
+
+    def setUp(self) -> None:
+        self._orig = submit_review._request
+
+    def tearDown(self) -> None:
+        submit_review._request = self._orig
+
+    def test_retry_path_uses_the_same_gate(self):
+        """De 422-retry mag geen variabele lezen die later pas gezet wordt."""
+        api = FakeApi([[review(21, "CHANGES_REQUESTED", OLDER)]])
+        submit_review._request = api
+        # precies de argumenten die het retry-pad doorgeeft
+        result = submit_review.maybe_cleanup(
+            {"key_issues_to_review": []}, 0, None, "o/r", "1", "token", CURRENT
+        )
+        self.assertEqual(result, [21])
+
+    def test_blocking_finding_blocks_cleanup_even_with_explicit_comment_event(self):
+        api = FakeApi([[review(22, "CHANGES_REQUESTED", OLDER)]])
+        submit_review._request = api
+        result = submit_review.maybe_cleanup(
+            {"key_issues_to_review": [{"x": 1}]}, 1, None, "o/r", "1", "token", CURRENT
+        )
+        self.assertEqual(result, [])
+        self.assertEqual(api.dismissed, [])
+
+    def test_incremental_run_blocks_cleanup(self):
+        api = FakeApi([[review(23, "CHANGES_REQUESTED", OLDER)]])
+        submit_review._request = api
+        result = submit_review.maybe_cleanup(
+            {"key_issues_to_review": []}, 0, "2026-11-05T00:00:00Z", "o/r", "1", "token", CURRENT
+        )
+        self.assertEqual(result, [])
+
+    def test_api_failure_warns_and_returns_empty(self):
+        class Boom(FakeApi):
+            def __call__(self, method, url, token, payload=None):
+                if method == "PUT":
+                    raise RuntimeError("403")
+                return super().__call__(method, url, token, payload)
+
+        submit_review._request = Boom([[review(24, "CHANGES_REQUESTED", OLDER)]])
+        result = submit_review.maybe_cleanup(
+            {"key_issues_to_review": []}, 0, None, "o/r", "1", "token", CURRENT
+        )
+        self.assertEqual(result, [])
+
+
 if __name__ == "__main__":
     unittest.main()
