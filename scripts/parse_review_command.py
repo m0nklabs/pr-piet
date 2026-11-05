@@ -48,7 +48,10 @@ import re
 import sys
 import urllib.request
 
-import yaml
+try:  # PyYAML is not guaranteed on the runner's system python (see load_allowlist)
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - environment dependent
+    yaml = None
 
 # Commands pr-agent understands in a comment (the fork adds review2).
 PASSTHROUGH_COMMANDS = (
@@ -105,8 +108,43 @@ def first_command(body: str) -> tuple[str, str] | None:
     return None
 
 
+def _load_allowlist_without_yaml(path: str) -> list[str]:
+    """Read the flat ``models:`` list without PyYAML.
+
+    The runner's system python does not always ship PyYAML: on 2026-11-04 a
+    Homebrew python3.15 without it made every ``/review=<model>`` run die with
+    ``ModuleNotFoundError: No module named 'yaml'``. The file is a flat list of
+    scalars, so a strict line reader is enough — and it raises instead of
+    guessing when the shape is anything else, so a malformed file can never
+    silently widen the allowlist.
+    """
+    models: list[str] = []
+    in_models = False
+    with open(path, encoding="utf-8") as fh:
+        for raw in fh:
+            line = raw.split("#", 1)[0].rstrip()
+            if not line.strip():
+                continue
+            if not line.startswith((" ", "\t")):
+                in_models = line.strip() == "models:"
+                continue
+            if not in_models:
+                continue
+            stripped = line.strip()
+            if not stripped.startswith("- "):
+                raise ValueError(f"{path}: unexpected line under 'models': {stripped!r}")
+            value = stripped[2:].strip().strip("'\"")
+            if value:
+                models.append(value)
+    if not models:
+        raise ValueError(f"{path}: no models found")
+    return models
+
+
 def load_allowlist(path: str) -> list[str]:
     """Read the allowed model ids (bare gateway ids) from the YAML file."""
+    if yaml is None:
+        return _load_allowlist_without_yaml(path)
     with open(path, encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     models = data.get("models") or []

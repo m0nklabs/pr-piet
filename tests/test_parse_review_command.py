@@ -302,3 +302,32 @@ def test_default_model_temperature_is_low():
     rc, out, _ = run("/review")
     assert rc == 0
     assert out["temperature"] == "0.2"
+
+
+def test_allowlist_reader_works_without_pyyaml():
+    """The runner's system python may lack PyYAML (2026-11-04 incident).
+
+    The fallback must return exactly what the YAML path returns, so a missing
+    dependency can never change which models are allowed.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import parse_review_command as module
+
+    path = str(Path(__file__).resolve().parents[1] / "config" / "models.allowed.yaml")
+    with_yaml = module.load_allowlist(path)
+    without_yaml = module._load_allowlist_without_yaml(path)
+    assert without_yaml == with_yaml
+    assert without_yaml, "allowlist must not be empty"
+
+
+def test_allowlist_fallback_rejects_unexpected_shape(tmp_path):
+    """A malformed file must raise, never silently widen the allowlist."""
+    import pytest
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import parse_review_command as module
+
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("models:\n  - ok/model\n  not-a-list-item\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        module._load_allowlist_without_yaml(str(bad))
