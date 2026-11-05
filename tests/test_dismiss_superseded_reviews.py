@@ -21,6 +21,7 @@ import submit_review  # noqa: E402
 
 CURRENT = "aaaa1111"
 OLDER = "bbbb2222"
+NEWER = "cccc3333"
 BOT = "github-actions[bot]"
 
 
@@ -29,22 +30,29 @@ def review(rid: int, state: str, commit: str, login: str = BOT) -> dict:
 
 
 class FakeApi:
-    """Vervangt submit_review._request en houdt de dismissals bij."""
+    """Vervangt submit_review._request en houdt dismissals + payloads bij."""
 
-    def __init__(self, pages: list[list[dict]]):
+    def __init__(self, pages: list[list[dict]], ancestors: set[str] | None = None):
         self.pages = pages
+        # welke review-commits zijn voorouder van de huidige head
+        self.ancestors = ancestors if ancestors is not None else {OLDER}
         self.dismissed: list[int] = []
+        self.payloads: list[dict] = []
         self.calls: list[tuple[str, str]] = []
 
     def __call__(self, method: str, url: str, token: str, payload: dict | None = None):
         self.calls.append((method, url))
         if method == "GET" and url.endswith("/user"):
             return {"login": BOT}
+        if method == "GET" and "/compare/" in url:
+            older = url.split("/compare/")[1].split("...")[0]
+            return {"status": "ahead" if older in self.ancestors else "diverged"}
         if method == "GET":
             page = int(url.rsplit("page=", 1)[1]) if "page=" in url else 1
             return self.pages[page - 1] if page <= len(self.pages) else []
         if method == "PUT" and "/dismissals" in url:
             self.dismissed.append(int(url.split("/reviews/")[1].split("/")[0]))
+            self.payloads.append(payload or {})
             return {"state": "DISMISSED"}
         raise AssertionError(f"onverwachte call: {method} {url}")
 
@@ -56,8 +64,10 @@ class DismissSupersededTests(unittest.TestCase):
     def tearDown(self) -> None:
         submit_review._request = self._orig
 
-    def run_with(self, pages: list[list[dict]], current: str = CURRENT) -> FakeApi:
-        api = FakeApi(pages)
+    def run_with(
+        self, pages: list[list[dict]], current: str = CURRENT, ancestors=None
+    ) -> FakeApi:
+        api = FakeApi(pages, ancestors=ancestors)
         submit_review._request = api
         result = submit_review.dismiss_superseded_changes_requested(
             "o/r", "1", "token", current
@@ -73,18 +83,20 @@ class DismissSupersededTests(unittest.TestCase):
         api = self.run_with([[review(12, "CHANGES_REQUESTED", CURRENT)]])
         self.assertEqual(api.dismissed, [])
 
+    def test_keeps_an_objection_on_a_newer_head(self):
+        """Een parallelle run op een nieuwere head is geen vervallen oordeel."""
+        api = self.run_with(
+            [[review(19, "CHANGES_REQUESTED", NEWER)]], ancestors={OLDER}
+        )
+        self.assertEqual(api.dismissed, [])
+
     def test_never_touches_a_human_review(self):
         api = self.run_with([[review(13, "CHANGES_REQUESTED", OLDER, login="m0nk111")]])
         self.assertEqual(api.dismissed, [])
 
     def test_ignores_commented_and_approved_reviews(self):
         api = self.run_with(
-            [
-                [
-                    review(14, "COMMENTED", OLDER),
-                    review(15, "APPROVED", OLDER),
-                ]
-            ]
+            [[review(14, "COMMENTED", OLDER), review(15, "APPROVED", OLDER)]]
         )
         self.assertEqual(api.dismissed, [])
 
@@ -99,10 +111,43 @@ class DismissSupersededTests(unittest.TestCase):
         self.assertEqual(api.dismissed, [17])
 
     def test_dismissal_message_explains_itself(self):
-        api = FakeApi([[review(18, "CHANGES_REQUESTED", OLDER)]])
-        submit_review._request = api
-        submit_review.dismiss_superseded_changes_requested("o/r", "1", "token", CURRENT)
-        self.assertEqual(api.dismissed, [18])
+        api = self.run_with([[review(18, "CHANGES_REQUESTED", OLDER)]])
+        self.assertEqual(len(api.payloads), 1)
+        message = api.payloads[0].get("message", "")
+        self.assertIn("Superseded", message)
+        self.assertIn("later head", message)
+        self.assertEqual(api.payloads[0].get("event"), "DISMISS")
+
+
+class CleanVerdictGateTests(unittest.TestCase):
+    """De opruiming mag alleen bij een bewezen schone, volledige review."""
+
+    def test_incremental_review_does_not_clean_up(self):
+        # --since gezet => incrementele run => geen opruiming
+        self.assertFalse(
+            submit_review.cleanup_allowed(
+                review_data={"key_issues_to_review": []}, n_block=0, since="2026-11-05T00:00:00Z"
+            )
+        )
+
+    def test_missing_review_json_does_not_clean_up(self):
+        self.assertFalse(
+            submit_review.cleanup_allowed(review_data=None, n_block=0, since=None)
+        )
+
+    def test_blocking_finding_does_not_clean_up(self):
+        self.assertFalse(
+            submit_review.cleanup_allowed(
+                review_data={"key_issues_to_review": [{"x": 1}]}, n_block=1, since=None
+            )
+        )
+
+    def test_full_clean_review_cleans_up(self):
+        self.assertTrue(
+            submit_review.cleanup_allowed(
+                review_data={"key_issues_to_review": []}, n_block=0, since=None
+            )
+        )
 
 
 if __name__ == "__main__":

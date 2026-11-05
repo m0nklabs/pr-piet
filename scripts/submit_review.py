@@ -193,6 +193,38 @@ def parse_findings_state(body: str) -> list[dict]:
     return [f for f in findings if isinstance(f, dict)] if isinstance(findings, list) else []
 
 
+def cleanup_allowed(review_data: dict | None, n_block: int, since: str | None) -> bool:
+    """Mag deze run vervallen bezwaren intrekken?
+
+    Drie voorwaarden, alle drie nodig:
+    - er is een review-JSON (zonder verdict valt er niets te bewijzen);
+    - die JSON bevat nul blokkerende bevindingen;
+    - het is een VOLLEDIGE review (geen ``--since``): een incrementele run
+      beoordeelt alleen de nieuwe diff, dus "geen bevindingen" zegt daar niets
+      over een ouder, nog openstaand bezwaar.
+    """
+    return review_data is not None and n_block == 0 and not since
+
+
+def _is_ancestor(repo: str, token: str, older_sha: str, newer_sha: str) -> bool:
+    """Is ``older_sha`` een voorouder van ``newer_sha``?
+
+    SHA-ongelijkheid bewijst geen vervallen-oordeel: een schone run voor head A
+    kan eindigen nadat een andere run CHANGES_REQUESTED postte op de nieuwere
+    head B. Alleen als de review-commit echt in de geschiedenis van de schoon
+    bevonden head zit, is het bezwaar vervallen.
+    """
+    if not older_sha or not newer_sha or older_sha == newer_sha:
+        return False
+    try:
+        cmp = _request(
+            "GET", f"{API}/repos/{repo}/compare/{older_sha}...{newer_sha}", token
+        )
+    except Exception:  # noqa: BLE001 - onbekend is niet vervallen
+        return False
+    return (cmp or {}).get("status") in ("ahead", "identical")
+
+
 def dismiss_superseded_changes_requested(
     repo: str, pr_number: str, token: str, current_sha: str
 ) -> list[int]:
@@ -230,8 +262,13 @@ def dismiss_superseded_changes_requested(
                 continue
             if rv.get("state") != "CHANGES_REQUESTED":
                 continue
-            if (rv.get("commit_id") or "") == current_sha:
+            review_sha = rv.get("commit_id") or ""
+            if review_sha == current_sha:
                 continue  # levend bezwaar op deze head: blijft staan
+            if not _is_ancestor(repo, token, review_sha, current_sha):
+                # Niet aantoonbaar ouder (bv. een parallelle run op een nieuwere
+                # head): laat staan.
+                continue
             review_id = rv.get("id")
             if not review_id:
                 continue
@@ -812,6 +849,12 @@ def main() -> int:
     if args.review_json:
         try:
             review_data = load_review_json(args.review_json)
+            # Blokkerend-aantal onafhankelijk van het gevraagde event: met
+            # --event COMMENT wordt de auto-verdict-tak overgeslagen, en dan mag
+            # de opruiming niet doorgaan terwijl de JSON een blocking finding
+            # bevat.
+            if review_data is not None:
+                _, n_block, _, _ = verdict_from_review(review_data)
         except Exception as exc:  # noqa: BLE001
             print(f"kon review-JSON niet laden ({args.review_json}): {exc}",
                   file=sys.stderr)
@@ -1157,7 +1200,7 @@ def main() -> int:
                 )
                 print(result.get("html_url", "(geen url)"))
                 print("(inline comments overgeslagen: locaties niet in diff)", file=sys.stderr)
-                if event == "COMMENT" and n_block == 0:
+                if clean_verdict:
                     try:
                         dismiss_superseded_changes_requested(
                             repo, args.pr_number, token, commit_sha
@@ -1175,7 +1218,11 @@ def main() -> int:
     print(result.get("html_url", "(geen url in response)"))
 
     # 6. Ons eigen vervallen bezwaar opruimen (zie de functie hierboven).
-    if event == "COMMENT" and n_block == 0:
+    # Alleen bij een bewezen schone, VOLLEDIGE review: een incrementele run
+    # (--since) beoordeelt alleen de nieuwe diff, dus "geen bevindingen" zegt
+    # daar niets over een ouder, nog openstaand bezwaar.
+    clean_verdict = cleanup_allowed(review_data, n_block, args.since)
+    if clean_verdict:
         try:
             dismissed = dismiss_superseded_changes_requested(
                 repo, args.pr_number, token, commit_sha
