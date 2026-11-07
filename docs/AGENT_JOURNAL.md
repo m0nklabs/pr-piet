@@ -784,3 +784,32 @@
   betrouwbare faal-detectie, niet de runs-API; (2) `gh api --jq` met `--arg`
   in een `while`-lus faalde stil (review-telling werd "?"), dus verifieer
   resultaten altijd apart na de sweep.
+
+- **"Reviewt PR-Piet hier?" — nee, en waarom 15 private repo's stil stuk waren
+  (2026-11-07, operator-vraag over lastsync PR #3).** `lastsync` had geen
+  `.github/workflows` en dus geen caller: een `/review`-comment deed niets.
+  Caller geïnstalleerd op operator-instructie ("laat het werken" — bewuste
+  uitzondering op harde regel 9). Daarna faalde de review met
+  `401 Invalid API Key`. Uitspitten:
+  1. De key zelf was gezond (HTTP 200 op `/v1/models` én chat).
+  2. De gateway-log toonde `invalid_api_key` met fingerprint `b843d3301351`
+     — die hoort bij **geen enkele** van de 42 geregistreerde keys
+     (sha256[:12]-vergelijking + admin-API `/api/keys`).
+  3. Een tijdelijke diagnostic-workflow in de doel-repo (alleen lengte +
+     fingerprint, nooit de waarde): `GUARDIAN_API_KEY` is **LEEG**. Ook
+     `GH_PAT` en `OPENAI_API_KEY`: leeg. Een repo-level testsecret kwam wél
+     door (`len=15`).
+  4. Zelfde diagnostic in het publieke `pr-piet-test`: org-secret komt daar
+     **wel** door (`len=40`, juiste fingerprint).
+  **Oorzaak: de org zit op het gratis plan; org-secrets met
+  `visibility=all` worden daar niet aan private repo's geleverd.** Repo-level
+  secrets werken wel. Fix: repo-secret `GUARDIAN_API_KEY` gezet in alle 15
+  private m0nklabs-repo's met een caller; `lastsync` geverifieerd — review
+  gepost (run `42419073349`, `COMMENTED`, head `2932e8f4`).
+  Lessen: (a) een lege key geeft `invalid_api_key` met de fingerprint van een
+  niet-bestaande key — niet "API Key required", dus de foutmelding wijst niet
+  naar het echte probleem; (b) vergelijk een **publieke** repo als controle
+  voordat je GitHub de schuld geeft; (c) de twee verschillende fingerprints
+  waren twee bronnen: een 5-minuten-poller (`2dc9fe1bc70b`, niet van ons) en
+  onze modelcall (`b843d3301351`).
+  Opgeruimd: test-secret `ZZTEST`, beide diagnostic-workflows.
