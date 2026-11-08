@@ -845,3 +845,19 @@
 - **Les 2:** `.gitignore`/lockfiles/gegenereerde code leveren legitiem een
   lege diff op. Onderscheid "niets te reviewen" (groen) van "model/gateway
   faalde" (rood) — harde regel 2 gaat over dat tweede.
+
+- **Vervolg op dezelfde dag — de converter las de verkeerde vorm.** De eerste
+  live run (`lastsync` #6, review `5817619152`) was groen en de statuscomment
+  was goed, maar de **review-body** zei "no findings" i.p.v. "nothing to
+  review". Oorzaak: `_no_reviewable_files()` verwachtte
+  `{"review": {"no_reviewable_files": ...}}`, terwijl de action de review-JSON
+  **vlak** schrijft (`key_issues_to_review` / `no_reviewable_files` op
+  top-level). `extract_key_issues()` had die fallback al
+  (`review_data.get("review") or review_data`), de nieuwe helper niet — en de
+  unit-test gebruikte de geneste fixture, dus die stond groen op een vorm die
+  productie nooit levert. Fix `2a339a2`: dezelfde fallback, en de tests dekken
+  nu **beide** vormen met de vlakke vorm als primaire fixture.
+- **Les:** bij een nieuw veld in de review-JSON nooit een vorm aannemen — kijk
+  in het `REVIEW_JSON:`-regel van een echte run. Genest én vlak komen beide
+  voor, dus élke lezer van die JSON heeft de `or`-fallback nodig. Een test op de
+  verkeerde vorm is erger dan geen test: het geeft valse dekking.
