@@ -413,7 +413,12 @@ def _no_reviewable_files(review_data: dict | None) -> bool:
     """
     if not isinstance(review_data, dict):
         return False
-    review = review_data.get("review")
+    # De action schrijft de review-JSON VLAM (key_issues_to_review/... op
+    # top-level), terwijl dezelfde data genest kan voorkomen. Zelfde fallback als
+    # extract_key_issues: zonder die fallback las deze helper de vlakke vorm nooit
+    # en viel de review-body terug op "no findings" (bewezen in productie,
+    # lastsync #6 review 5817619152, 2026-11-08).
+    review = review_data.get("review") or review_data
     if not isinstance(review, dict):
         return False
     return bool(review.get("no_reviewable_files"))

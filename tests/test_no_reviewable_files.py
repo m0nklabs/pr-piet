@@ -25,7 +25,15 @@ from submit_review import (  # noqa: E402
 HEAD = "abcdef1234567890abcdef1234567890abcdef12"
 IDENTITY = "<!-- pr-agent:review:full -->"
 
-EMPTY_DIFF = {
+# De action schrijft de review-JSON VLAM (dit is de vorm die productie echt
+# leverde op lastsync #6); genest komt ook voor. Beide moeten werken.
+EMPTY_DIFF_FLAT = {
+    "key_issues_to_review": [],
+    "no_reviewable_files": True,
+    "security_concerns": "No reviewable files in this PR.",
+}
+
+EMPTY_DIFF_NESTED = {
     "review": {
         "key_issues_to_review": [],
         "no_reviewable_files": True,
@@ -35,41 +43,50 @@ EMPTY_DIFF = {
 
 
 class NoReviewableDetection(unittest.TestCase):
-    def test_flag_detected(self):
-        self.assertTrue(_no_reviewable_files(EMPTY_DIFF))
+    def test_flag_detected_flat(self):
+        """Productievorm: de action schrijft de review-JSON vlak."""
+        self.assertTrue(_no_reviewable_files(EMPTY_DIFF_FLAT))
+
+    def test_flag_detected_nested(self):
+        self.assertTrue(_no_reviewable_files(EMPTY_DIFF_NESTED))
 
     def test_missing_flag_is_false(self):
         self.assertFalse(_no_reviewable_files({"review": {"key_issues_to_review": []}}))
+        self.assertFalse(_no_reviewable_files({"key_issues_to_review": []}))
 
     def test_garbage_input_is_false(self):
         for value in (None, {}, {"review": None}, {"review": "text"}, []):
             self.assertFalse(_no_reviewable_files(value))
 
     def test_flag_false_is_false(self):
-        data = {"review": {"key_issues_to_review": [], "no_reviewable_files": False}}
-        self.assertFalse(_no_reviewable_files(data))
+        for data in (
+            {"key_issues_to_review": [], "no_reviewable_files": False},
+            {"review": {"key_issues_to_review": [], "no_reviewable_files": False}},
+        ):
+            self.assertFalse(_no_reviewable_files(data))
 
 
 class NoReviewableRendering(unittest.TestCase):
-    def test_body_says_nothing_to_review(self):
-        body = render_review_body(EMPTY_DIFF, commit_sha=HEAD, identity=IDENTITY)
-        self.assertIn("## PR-Piet review — nothing to review", body)
-        self.assertIn("filtered out before review", body)
-        self.assertIn("This is not a failure", body)
+    def test_body_says_nothing_to_review_for_both_shapes(self):
+        for data in (EMPTY_DIFF_FLAT, EMPTY_DIFF_NESTED):
+            body = render_review_body(data, commit_sha=HEAD, identity=IDENTITY)
+            self.assertIn("## PR-Piet review — nothing to review", body)
+            self.assertIn("filtered out before review", body)
+            self.assertIn("This is not a failure", body)
 
     def test_body_does_not_claim_a_clean_review(self):
-        body = render_review_body(EMPTY_DIFF, commit_sha=HEAD, identity=IDENTITY)
+        body = render_review_body(EMPTY_DIFF_FLAT, commit_sha=HEAD, identity=IDENTITY)
         self.assertNotIn("no findings", body.lower())
         self.assertNotIn("No blocking issues were found", body)
 
     def test_identity_marker_directly_under_the_heading(self):
-        body = render_review_body(EMPTY_DIFF, commit_sha=HEAD, identity=IDENTITY)
+        body = render_review_body(EMPTY_DIFF_FLAT, commit_sha=HEAD, identity=IDENTITY)
         lines = body.splitlines()
         self.assertEqual(lines[0], "## PR-Piet review — nothing to review")
         self.assertEqual(lines[1], IDENTITY)
 
     def test_verdict_is_comment_never_approve(self):
-        event, blocking, nonblocking, untagged = verdict_from_review(EMPTY_DIFF)
+        event, blocking, nonblocking, untagged = verdict_from_review(EMPTY_DIFF_FLAT)
         self.assertEqual(event, "COMMENT")
         self.assertEqual((blocking, nonblocking, untagged), (0, 0, 0))
 
