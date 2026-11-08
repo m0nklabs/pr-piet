@@ -813,3 +813,35 @@
   waren twee bronnen: een 5-minuten-poller (`2dc9fe1bc70b`, niet van ons) en
   onze modelcall (`b843d3301351`).
   Opgeruimd: test-secret `ZZTEST`, beide diagnostic-workflows.
+
+## 2026-11-08 — lege diff: "niets te reviewen" i.p.v. "review failed"
+
+- **Trigger:** `m0nklabs/lastsync` PR #6 wijzigt alleen `.gitignore`. pr-agent
+  filtert dat bestand weg (`Filtered out files with invalid extensions`), de
+  diff is daarna leeg, en de run werd ROOD zonder enige review (4 runs,
+  status-thread "review failed").
+- **Eerste laag:** `/describe` faalde op de lege diff
+  (`Description chunk 1 returned no prediction` → `raise chunk_errors[0]`) en
+  `_run_auto_tool` re-raised alles behalve `IncompletePullRequestFilesError`,
+  dus de action-stap stierf **vóór** de review. Fix (fork `e0d6857`):
+  `_run_auto_tool(..., fatal=False)` voor `PRDescription` en
+  `PRCodeSuggestions`; `PRReviewer` blijft fataal (harde regel 2).
+- **Tweede laag (pas zichtbaar na de eerste fix):** de reviewer zelf doet
+  hetzelfde — `pr_reviewer.py` gooit `ValueError("No PR diff fits the
+  /review request")` bij een lege diff. Fix (fork `279f238` + pr-piet
+  `b3826f7`): een lege diff is **geen** model- of reviewfout. De fork levert
+  een schema-geldige no-op review met `no_reviewable_files: true` (nieuw
+  optioneel veld op het `Review`-model — `extra="forbid"` blijft intact,
+  dus geen truc via een bestaand veld), `key_issues_to_review: []`.
+  pr-piet rendert daar "PR-Piet review — nothing to review" van, verdict
+  blijft COMMENT (nooit APPROVE), exit 0, status-state `skipped` →
+  "PR-Piet — nothing to review". Tier 2 slaat over (`no_reviewable` in de
+  job-outputs), want één no-op review is genoeg.
+- **Les:** een exception die tijdens de action-stap opduikt, doodt in deze
+  stack de héle stap — alle tools zitten in één `run:`. Elke "tool X faalt"
+  is dus in eerste instantie "geen review", ongeacht X. Bij een rode run
+  zonder review: kijk altijd welke tool als *eerste* faalde, niet naar de
+  tool die je verwachtte.
+- **Les 2:** `.gitignore`/lockfiles/gegenereerde code leveren legitiem een
+  lege diff op. Onderscheid "niets te reviewen" (groen) van "model/gateway
+  faalde" (rood) — harde regel 2 gaat over dat tweede.
