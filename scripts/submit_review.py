@@ -403,6 +403,22 @@ def _issue_is_verified(issue: dict) -> bool:
     return not content[:120].lower().startswith("uncertain")
 
 
+def _no_reviewable_files(review_data: dict | None) -> bool:
+    """True when the reviewer reported that nothing survived its file filters.
+
+    pr-agent writes `no_reviewable_files` into the review JSON when every changed
+    file was filtered out (`.gitignore`, lockfiles, generated code), so the diff it
+    analysed was empty. That is not a model failure: the PR simply has nothing to
+    review, and the run must stay green instead of reporting "review failed".
+    """
+    if not isinstance(review_data, dict):
+        return False
+    review = review_data.get("review")
+    if not isinstance(review, dict):
+        return False
+    return bool(review.get("no_reviewable_files"))
+
+
 def verdict_from_review(review_data: dict) -> tuple[str, int, int, int]:
     """Bepaal (event, #blocking, #non-blocking, #untagged) uit de review-JSON.
 
@@ -502,7 +518,10 @@ def render_review_body(
     blocking = [i for i in issues if _issue_is_verified(i)]
     nonblocking = [i for i in issues if not _issue_is_verified(i)]
 
-    if blocking:
+    no_reviewable = _no_reviewable_files(review_data)
+    if no_reviewable:
+        heading = "## PR-Piet review — nothing to review"
+    elif blocking:
         heading = "## PR-Piet review — changes requested"
     elif issues:
         heading = "## PR-Piet review — non-blocking findings"
@@ -555,6 +574,13 @@ def render_review_body(
                 if text_line.strip():
                     lines.append(f"   {text_line.strip()}")
             lines.append("")
+    elif no_reviewable:
+        lines += [
+            "",
+            "Every changed file in this PR is filtered out before review "
+            "(`.gitignore`, lockfiles, generated or vendored code), so there is "
+            "nothing to analyse. This is not a failure: no review was needed.",
+        ]
     else:
         lines += ["", "No blocking issues were found in the changed files."]
 

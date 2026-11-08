@@ -579,8 +579,18 @@ jobs:
             printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review-detect.json
             clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json /tmp/pr-agent-review-detect.json)
           fi
+          # Een lege diff (alle bestanden weggefilterd) is geen model- of
+          # reviewfout: de fork meldt dat expliciet met no_reviewable_files,
+          # zodat de run groen blijft en de statuscomment "nothing to review"
+          # zegt in plaats van "review failed" (lastsync #6, 2026-11-08).
+          no_reviewable="false"
+          if [ -n "${REVIEW_JSON}" ] && printf '%s' "${REVIEW_JSON}" \
+              | grep -Eq '"no_reviewable_files"[[:space:]]*:[[:space:]]*true'; then
+            no_reviewable="true"
+          fi
           echo "tier1_clean=${clean}" >> "$GITHUB_OUTPUT"
-          echo "tier1_clean=${clean}"
+          echo "no_reviewable=${no_reviewable}" >> "$GITHUB_OUTPUT"
+          echo "tier1_clean=${clean} no_reviewable=${no_reviewable}"
 
       - name: Één eindbeoordeling per PR (upsert) + pr-agent-sporen opruimen
         if: steps.cmdguard.outputs.proceed == 'true' && steps.pr-state.outputs.closed != 'true' && steps.cmdguard.outputs.command != 'review2' && steps.submit.outcome == 'success'
@@ -612,6 +622,9 @@ jobs:
           state="findings"
           if [ "${{ steps.detect.outputs.tier1_clean }}" = "true" ]; then
             state="clean"
+          fi
+          if [ "${{ steps.detect.outputs.no_reviewable }}" = "true" ]; then
+            state="skipped"
           fi
 
           # Run-summary (operator-wens 2026-10-03): de uitslag hoort niet
@@ -656,7 +669,7 @@ jobs:
   review_tier2:
     name: "Review tier 2 (second opinion)"
     needs: [review_tier1]
-    if: ${{ (inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true') || needs.review_tier1.outputs.command == 'review2' }}
+    if: ${{ (inputs.enable_tier2 && needs.review_tier1.outputs.tier1_clean == 'true' && needs.review_tier1.outputs.pending_cr != 'true' && needs.review_tier1.outputs.no_reviewable != 'true') || needs.review_tier1.outputs.command == 'review2' }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 60
     permissions:
@@ -846,8 +859,14 @@ jobs:
             printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review-detect.json
             clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json /tmp/pr-agent-review-detect.json)
           fi
+          no_reviewable="false"
+          if [ -n "${REVIEW_JSON}" ] && printf '%s' "${REVIEW_JSON}" \
+              | grep -Eq '"no_reviewable_files"[[:space:]]*:[[:space:]]*true'; then
+            no_reviewable="true"
+          fi
           echo "tier2_clean=${clean}" >> "$GITHUB_OUTPUT"
-          echo "tier2_clean=${clean}"
+          echo "no_reviewable=${no_reviewable}" >> "$GITHUB_OUTPUT"
+          echo "tier2_clean=${clean} no_reviewable=${no_reviewable}"
 
       - name: Tier-2 eindbeoordeling + pr-agent-sporen opruimen
         if: steps.submit.outcome == 'success'
@@ -871,6 +890,9 @@ jobs:
           state="findings"
           if [ "${{ steps.detect.outputs.tier2_clean }}" = "true" ]; then
             state="clean"
+          fi
+          if [ "${{ steps.detect.outputs.no_reviewable }}" = "true" ]; then
+            state="skipped"
           fi
           {
             echo "## PR-Piet tier-2 review — ${state}"

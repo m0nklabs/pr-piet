@@ -53,6 +53,13 @@ def render_status(state: str, head: str, detail: str = "") -> str:
     if state == "clean":
         headline = "**PR-Piet — no findings**"
         tail = "All changed files were reviewed."
+    elif state == "skipped":
+        headline = "**PR-Piet — nothing to review**"
+        tail = (
+            "Every changed file is filtered out before analysis "
+            "(`.gitignore`, lockfiles, generated or vendored code), so there was "
+            "nothing to review. This is not a failure."
+        )
     elif state == "failed":
         headline = "**PR-Piet — review failed**"
         tail = "No review was posted; see the workflow run for the error."
@@ -147,7 +154,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-number", required=True)
     parser.add_argument(
-        "--state", required=True, choices=["running", "clean", "findings", "failed"]
+        "--state", required=True, choices=["running", "clean", "findings", "failed", "skipped"]
     )
     parser.add_argument("--head", default="")
     parser.add_argument("--detail", default="")
