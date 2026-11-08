@@ -176,15 +176,21 @@ pr-agent-comment op terug.
   regels per bestand (`get_added_lines_per_file`) en filtert niet-resolvable
   threads (skip) — de samenvatting blijft altijd als formele review staan.
   Dit is inherent aan de GitHub API, niet te omzeilen met lijn-nummering.
-- **Dedup blokkeert alleen fallback-reviews (geen verse JSON).** De
-  review-dedup (marker `<!-- pr-piet-review:v1 head=<sha> -->` of zelfde
-  commit_id + Reviewer Guide-heading) geldt ALLEEN als de review-JSON van de
-  huidige run NIET is doorgekomen (`review_data is None`, dus we zouden een
-  fallback-body van een oude issue-comment posten). Komt de verse review-JSON
-  wél door, dan posten we altijd — een échte nieuwe analyse moet een evt.
-  stale review op dezelfde head vervangen (GitHub toont de laatste als de
-  actieve review). Dedup is bedoeld om identieke fallback-hertriggers te
-  stoppen, niet om een verse analyse te blokkeren.
+- **Dedup heeft TWEE paden (gecorrigeerd 2026-11-08; de oude tekst hier
+  beweerde dat dedup alléén fallback-reviews raakt, wat de code tegenspreekt).**
+  1. **Fallback-pad** (`review_data is None`): geen verse JSON, dus we zouden
+     een fallback-body van een oude issue-comment posten. `already_reviewed()`
+     (marker `<!-- pr-piet-review:v1 head=<sha> -->` of zelfde commit_id +
+     Reviewer Guide-heading) blokkeert dat — **geen tijdvenster**.
+  2. **Verse-JSON-pad** (`review_data is not None`): dedupe mét
+     `--dedupe-window-minutes` (default 15), en alléén bij **hetzelfde model**
+     op **dezelfde head** (zie 4b-bis, caretaker #16). Een ander model op
+     dezelfde head is een bewuste second opinion en post gewoon.
+  Gevolg voor verifiëren: een hertrigger op dezelfde head binnen 15 min met
+  hetzelfde model wordt overgeslagen **vóór** de body gerenderd wordt, dus
+  zo'n run levert geen bewijs op (waargenomen 2026-11-08, lastsync #6: run
+  groen, geen nieuwe review, de oude review bleef staan). Wil je een nieuwe
+  body zien: push een nieuwe head, wacht het venster uit, of wissel van model.
 - **Modelruimte: `ai_timeout = 900` (15 min/call).** Op omvangrijke PR's
   (tientallen bestanden + ticket-compliance-body + repo-map met duizenden
   symbolen) duurt een enkele modelcall >5 min; met `ai_timeout=300` kapte
