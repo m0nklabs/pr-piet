@@ -861,3 +861,35 @@
   in het `REVIEW_JSON:`-regel van een echte run. Genest én vlak komen beide
   voor, dus élke lezer van die JSON heeft de `or`-fallback nodig. Een test op de
   verkeerde vorm is erger dan geen test: het geeft valse dekking.
+
+## 2026-11-09 — PR-Piet beoordeelde een charter in plaats van de diff
+
+- **Trigger:** operator zag in `m0nklabs/lastsync` PR #7 de zin "After 24 hours,
+  the rule permits merging without addressing that feedback" en zei terecht dat
+  dat niet klopt én dat PR-Piet dsh-interne regels niet hoort te verkondigen.
+- **Wat er echt gebeurde (erger dan de melding):** PR #7 wijzigt **één** bestand
+  (`.agents/skills/unreal-execution-routing/SKILL.md`). De review gaf
+  CHANGES_REQUESTED met een blokkerende `[verified-bug]` op **`AGENTS.md:86`** —
+  een bestand dat niet in de PR zit. De geciteerde merge-regel staat daar
+  helemaal niet: `grep -niE '24 hour|merg|outstanding review' AGENTS.md` op de
+  PR-head (`270962f7`) geeft **nul** treffers. Het model heeft de tekst dus
+  verzonnen en aan een bestaand pad+regelnummer gehangen.
+- **Oorzaak (twee, beide in onze eigen config):**
+  1. pr-agent injecteert `AGENTS.md` als `repo_context_files`
+     (`repo_context_max_lines: 300`, default branch) — 300 regels charter in
+     élke prompt.
+  2. Onze `extra_instructions` zei letterlijk: "Treat them as binding house
+     standards; a diff that violates one is a finding, so cite the rule you rely
+     on." Dat nodigt uit tot een **audit van het beleid** in plaats van van de
+     wijziging.
+- **Fix (6f66b84):** PROJECT STANDARDS gebruikt huisregels nu alleen om te
+  beoordelen of de GEWIJZIGDE code ze schendt; de regelbestanden zijn nooit
+  reviewdoel en beleid/merge-regels worden niet als eigen advies herhaald.
+  Plus een harde **ANCHOR**-regel: elke bevinding moet naar een bestand+regel
+  wijzen die de PR wijzigt; een probleem buiten de changed set mag hooguit als
+  context genoemd worden.
+- **Les:** "context" en "reviewdoel" zijn niet hetzelfde. Zodra je een model
+  beleidsdocumenten geeft én zegt dat overtredingen bevindingen zijn, gaat het
+  de documenten beoordelen — en dan is een verzonnen citaat één stap verder.
+  Elke instructie die een model naar een *bron* laat kijken, heeft een expliciete
+  grens nodig over wat het daarover mag beweren.
