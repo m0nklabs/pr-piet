@@ -106,7 +106,15 @@ on:
 jobs:
   map:
     name: "Map PR context (tree-sitter)"
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event.issue.pull_request }}
+    # Een push op een open PR reviewt NIET meer automatisch (operator-besluit
+    # 2026-11-09). De committer bepaalt zelf wanneer hij klaar is en plaatst dan
+    # een /review-comment; dat verzoek is de enige trigger. Reden: met de
+    # automatische push-review kreeg je per "klaar"-moment twee modelcalls —
+    # de automatische run plus het handmatige verzoek, waarvan de tweede alleen
+    # door de dedupe tegengehouden werd (dus wel betaald, niet zichtbaar).
+    # De map-job skipt op synchronize; review_tier1 en -tier2 hangen met
+    # `needs: [map]` aan deze job en skippen dus mee.
+    if: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event.issue.pull_request) && github.event.action != 'synchronize' }}
     runs-on: [self-hosted, Linux]
     timeout-minutes: 20
     # issues + pull-requests: write zijn uitsluitend voor de 👀-ontvangst-stap
