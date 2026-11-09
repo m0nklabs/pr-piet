@@ -15,6 +15,21 @@
 # ============================================================================
 
 [config]
+# GEEN charter-/regelbestanden in de reviewprompt (operator-besluit 2026-11-09).
+# pr-agent injecteert standaard `AGENTS.md` van de default branch als
+# `<instruction_files>` (repo_context_files, 300 regels). Die bestanden bevatten
+# projectbeleid en werkafspraken — regels voor de committer/PR-maker, niet voor
+# de reviewer. Ze horen dus niet in dit oordeel:
+#   1. De reviewer ging ze beoordelen in plaats van de diff. Op lastsync #7
+#      (wijzigt één SKILL.md) gaf hij een blokkerende [verified-bug] op
+#      `AGENTS.md:86` met een geciteerde merge-regel die daar niet bestaat —
+#      volledig verzonnen, en het bestand zat niet eens in de PR.
+#   2. De reviewer hoort geen beleid te verkondigen en al helemaal geen
+#      merge-/procesregels: dat is mensenwerk op de PR, niet zijn taak.
+# De repo-context die WIJ bewust injecteren (de tree-sitter map, artifact
+# `.pr_piet/context.md`) blijft gewoon — dat is code, geen beleid.
+repo_context_files = []
+
 # Tier 1 (primair): deepseek-v4.1-flash-1017 via de guardian gateway
 # (operator-besluit 2026-10-25; de workflow-env `config.model` overrschrijft
 # deze regel — hij staat hier alleen zodat een run zonder env dezelfde
