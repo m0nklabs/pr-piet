@@ -214,20 +214,35 @@ def latest_findings_state(repo: str, pr_number: str, token: str) -> list[dict]:
     return newest
 
 
-def build_findings_state(current_issues: list[dict], previous: list[dict]) -> list[dict]:
+def build_findings_state(
+    current_issues: list[dict],
+    previous: list[dict],
+    pr_paths: set[str] | None = None,
+) -> list[dict]:
     """Nieuwe state: huidige bevindingen actief, verdwenen eerdere gemarkeerd resolved.
 
     Een bevinding die in deze run niet meer gevonden wordt, is niet automatisch
     opgelost — de diff kan smaller zijn. Daarom blijft de status ``resolved``
     informatief: de prompt zegt expliciet dat een resolved finding alleen
     opnieuw gemeld mag worden als de code hem herintroduceert.
+
+    ``pr_paths`` is de volledige bestandslijst van de PR. Een bevinding op een pad
+    dat de PR niet wijzigt kan geen geldige bevinding zijn (zie de ANCHOR-regel in
+    de prompt), dus zo'n spook-entry uit een eerdere run valt hier weg in plaats
+    van elke volgende prompt te vervuilen. Bewezen geval: lastsync #7 kreeg een
+    verzonnen blokkerende bevinding op `AGENTS.md:86` — een bestand dat de PR nooit
+    aanraakt — en die reisde daarna als "resolved" mee in elke prompt. None of een
+    lege set betekent: niet filteren (fail-open, bv. als de bestandslijst niet
+    opgehaald kon worden).
     """
     current = [_state_entry(i, "active") for i in current_issues if isinstance(i, dict)]
     current_keys = {entry["id"] for entry in current}
     resolved = [
         {**entry, "state": "resolved"}
         for entry in previous
-        if entry.get("id") not in current_keys and entry.get("state") != "resolved"
+        if entry.get("id") not in current_keys
+        and entry.get("state") != "resolved"
+        and (not pr_paths or entry.get("path") in pr_paths)
     ]
     return (current + resolved)[:_MAX_STATE_FINDINGS]
 
@@ -1081,9 +1096,14 @@ def main() -> int:
     if body and review_data is not None:
         try:
             previous_state = latest_findings_state(repo, args.pr_number, token)
+            try:
+                pr_paths = set(get_added_lines_per_file(repo, args.pr_number, token))
+            except Exception:  # noqa: BLE001 - filter is een nice-to-have
+                pr_paths = None
             state = build_findings_state(
                 [i for i in extract_key_issues(review_data) if isinstance(i, dict)],
                 previous_state,
+                pr_paths,
             )
             marker = findings_state_marker(state)
             if marker:
