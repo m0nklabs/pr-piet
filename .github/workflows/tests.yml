@@ -1,11 +1,10 @@
 # ============================================================================
-# Tests — unittest suite in tests/, coverage over scripts/, upload to Codecov
+# Tests — pytest suite in tests/, coverage measured over scripts/
 # ----------------------------------------------------------------------------
-# Public repo: Codecov accepts the upload tokenless (there is no CODECOV_TOKEN
-# anywhere in the org), so the action is pinned by commit SHA instead of a tag
-# — a scanner whose behaviour can change between runs makes a green check
-# meaningless. Codecov reports through commit statuses (codecov/project,
-# codecov/patch), never a check run.
+# The coverage number is produced and enforced inside this job. There is no
+# upload: the Codecov upload failed with "Token required" while the job stayed
+# green (fail_ci_if_error: false), which made the check meaningless. A number
+# this job computes itself cannot go green while sending nothing.
 # ============================================================================
 
 name: Tests
@@ -18,7 +17,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write  # codecov-action v6 authenticates through GitHub OIDC
   contents: read
 
 jobs:
@@ -43,11 +41,5 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -q --cov=scripts --cov-report=xml
+          python -m pytest tests/ -q --cov=scripts --cov-report=term-missing
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-          verbose: true
