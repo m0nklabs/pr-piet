@@ -41,5 +41,5 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -q --cov=scripts --cov-report=term-missing
+          python -m pytest tests/ -q --cov=scripts --cov-report=term-missing --cov-fail-under=18
 
