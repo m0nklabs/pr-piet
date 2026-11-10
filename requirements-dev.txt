@@ -1,0 +1,8 @@
+# Test tooling for tests/ — CI runs this via .github/workflows/tests.yml and uploads
+# the resulting coverage.xml to Codecov. Not needed to run scripts/ in production.
+#
+# Pinned to the versions the suite was verified against on the self-hosted runners
+# (python 3.12, 2026-11-10): 107 passed, coverage measured over scripts/.
+pytest==9.2.0
+pytest-cov==7.1.0
+pyyaml==6.0.3
