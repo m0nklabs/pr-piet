@@ -1,0 +1,45 @@
+# ============================================================================
+# Tests — pytest suite in tests/, coverage measured over scripts/
+# ----------------------------------------------------------------------------
+# The coverage number is produced and enforced inside this job. There is no
+# upload: the Codecov upload failed with "Token required" while the job stayed
+# green (fail_ci_if_error: false), which made the check meaningless. A number
+# this job computes itself cannot go green while sending nothing.
+# ============================================================================
+
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: pytest + coverage
+    runs-on: [self-hosted, Linux]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest tests/ -q --cov=scripts --cov-report=term-missing --cov-fail-under=18
+
