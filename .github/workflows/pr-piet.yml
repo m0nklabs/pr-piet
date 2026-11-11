@@ -11,9 +11,13 @@ permissions:
   issues: write
   pull-requests: write
 
-# Eén review tegelijk per PR: nieuwe run cancelt de lopende.
+# Eén review tegelijk per PR en per event-type: een push of een bot-comment
+# mag een lopende review niet cancellen. Een comment die géén commando is
+# krijgt zijn eigen groep (-nc-<id>), zodat codecov/dependabot-comments nooit
+# een review doden. Zelfde vorm als de 29 andere callers.
 concurrency:
-  group: pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: >-
+    pr-piet-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}${{ github.event_name == 'issue_comment' && !startsWith(github.event.comment.body, '/') && format('-nc-{0}', github.event.comment.id) || '' }}
   cancel-in-progress: true
 
 jobs:
