@@ -893,3 +893,32 @@
   de documenten beoordelen — en dan is een verzonnen citaat één stap verder.
   Elke instructie die een model naar een *bron* laat kijken, heeft een expliciete
   grens nodig over wat het daarover mag beweren.
+
+## 2026-11-11 — Een bot-comment doodde de review (concurrency-groep)
+
+- **Symptoom:** PR-Piet PR #3 (`ci/codecov-coverage`) had géén review, terwijl
+  de auto-review op `opened` wél gestart was (run `42912159328`, 22:11:07Z).
+- **Spoor:** die run eindigde na 54 s als `cancelled`, om 22:12:01Z — zes
+  seconden nadat run `42912177713` (issue_comment, 22:11:55Z) ontstond. Die
+  tweede run was zelf `skipped`, want getriggerd door een **codecov[bot]**-
+  comment en de caller-guard `github.event.sender.type != 'Bot'` sloopt hem.
+  Netto: de review werd geannuleerd door een run die daarna niets deed. Geen
+  foutmelding, geen status-thread — de PR bleef gewoon ongereviewd.
+- **Oorzaak:** de caller van pr-piet zelf gebruikte nog de oude groep
+  `pr-piet-<nummer>`, zónder `github.event_name` en zonder de `-nc-`-tak. Een
+  comment en een pull_request-run belanden dan in dezelfde groep, en
+  `cancel-in-progress: true` laat de nieuwste winnen.
+- **Schaal:** 29 van de 30 callers hadden de juiste vorm al (met `event_name`
+  én `-nc-<comment-id>` voor niet-commando comments); alleen `m0nklabs/pr-piet`
+  was achtergebleven. Fix dus lokaal, geen org-brede uitrol nodig.
+- **Fix:** `09deebb` — groep gelijkgetrokken met de andere 29.
+- **Verificatie (2026-11-11):** test-PR #39 in `pr-piet-test`: auto-review op
+  `opened` (09:06:02Z) plus een niet-commando comment 31 s later. Beide runs
+  liepen **gelijktijdig**; de review-run eindigde `success` met 1 review
+  (`no findings`). Daarna `/review` op pr-piet #3: 1 review, `COMMENTED`,
+  status "findings". Test-PR gesloten, branch verwijderd, clone opgeruimd.
+- **Les:** een `concurrency`-groep die alleen op het PR-nummer keyt, laat élk
+  event op die PR elkaars werk cancellen — inclusief events die daarna door een
+  guard geskipt worden. Wie een guard toevoegt (`sender.type != 'Bot'`), moet
+  die guard óók in de concurrency-groep verwerken, anders is de cancel de
+  echte uitkomst en de skip alleen decor.
