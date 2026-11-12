@@ -189,3 +189,36 @@ model via de `model_tier1`-input (geen code-wijziging nodig).
   verkeerde niveau (choice, niet message); veld ontbreekt bovendien in het
   record-schema. Repro: ds-cap-probe 18:13:55Z — raw response 67.971 chars
   reasoning, capture 0/0.
+
+## Session 2026-11-05 (sticky CHANGES_REQUESTED — bot trekt eigen vervallen oordeel in)
+
+### Het probleem, gemeten in oelala
+
+GitHub's review-decision is plakkerig: een latere `COMMENT`-review wist een eerdere
+`CHANGES_REQUESTED` niet. Omdat PR-Piet nooit `APPROVE` post (harde regel 8) bleef zo'n
+blokkade **eeuwig** staan, ook nadat de bevinding was gefixt en de nieuwe head schoon
+terugkwam. In oelala kostte dat vier PR's een handmatige dismiss (#227, #228, #236, #239) —
+de operator moest elke keer zelf ingrijpen, en de merge-gate stond ondertussen op `BLOCKED`
+met een `reviewDecision` die niet meer bij de code hoorde.
+
+### De fix
+
+`submit_review.dismiss_superseded_changes_requested()`: na een **schone** review
+(`event == COMMENT`, nul blokkerende bevindingen) laat de bot zijn eigen
+`CHANGES_REQUESTED`-reviews intrekken die op een **oudere** head staan.
+
+Bewust smal:
+- alleen reviews van de **eigen** identiteit (`GET /user`), dus nooit die van een mens of
+  een andere bot;
+- nooit een review op de **huidige** head — dat is een levend bezwaar;
+- alleen bij een schone verdict, dus een nieuwe blokkerende bevinding laat alles staan;
+- fail-open: een mislukte dismiss geeft een `::warning::` en breekt de review niet.
+
+Geen `APPROVE`, geen merge-call: harde regel 8 blijft intact. De bot *trekt zich terug*, hij
+keurt niet goed.
+
+### Tests
+
+`tests/test_dismiss_superseded_reviews.py` — 7 cases: oudere head wordt ingetrokken, huidige
+head niet, menselijke review niet, `COMMENTED`/`APPROVED` niet, lege head doet niets,
+paginering over 100+ reviews, en de dismiss-message legt zichzelf uit. Suite: 58 tests groen.
