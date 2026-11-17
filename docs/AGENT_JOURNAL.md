@@ -922,3 +922,11 @@
   guard geskipt worden. Wie een guard toevoegt (`sender.type != 'Bot'`), moet
   die guard óók in de concurrency-groep verwerken, anders is de cancel de
   echte uitkomst en de skip alleen decor.
+
+## 2026-11-17 — Eerste externe fork-PR: secrets onthouden werkt, en de PR is ronduit kwaadaardig
+
+- **Symptoom:** oelala run 44049486477 rood, 16x `Invalid API Key`, `GUARDIAN_API_KEY` leeg in de env. Map-job (zonder secrets) groen op runner-3.
+- **Oorzaak (observeerbaar):** PR #258 is een **fork-PR** van externe contributor `badsi2177` (`badsi2177/oelala`). GitHub levert bij pull_request-events van externe forks bewust géén secrets aan workflows. Dit is de allereerste externe fork-PR sinds de stack bestaat (journal 2026-08-30: "0 fork-PRs in 435 gescalede PRs") — het eerder uitgestelde GitHub App-ontwerp was dus terecht uitgesteld, en de faal-safe (harde regel 2: rood, geen stille degradatie) werkte exact zoals ontworpen.
+- **Inhoud van de PR is het echte verhaal:** `.github/c211-probe.py` (+109) vraagt IMDSv2-tokens (169.254.169.254), GCP-metadata-tokens en Azure IMDS-tokens, en POST't hostname/id/nvidia-smi/runner-env naar een **publieke ntfy.sh-topic** (`out['_exfil']='ok'`). De body noemt het "read-only diagnostics". Klassieke credential-probing tegen self-hosted runners, vermomd als diagnose. `.github/workflows/gpu-tests.yml` (+2) bedraadt het op de GPU-pool.
+- **Handelswijze:** niets gemerged, niets gekeurd, geen review gesimuleerd; alleen de inhoud gelezen voor diagnose en een security-alert op het agent-board naar de operator (board seq 290). Aanbeveling meegegeven: PR sluiten + repo-instelling "Require approval for all external contributors".
+- **Lessen:** (a) fork-PR-secrets-deny is de effectieve eerste verdedigingslijn en faalt *luid* — precies goed; (b) een PR-body kan liegen; lees de diff, niet de beschrijving; (c) self-hosted runners + externe fork-PRs is een standing risico dat één instelling afdoet, niet workflow-code.
