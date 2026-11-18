@@ -922,7 +922,25 @@ def main() -> int:
         return 3
 
     if not review_data and not body:
-        print("(geen review geplaatst: geen review-JSON én geen review-comment gevonden)")
+        # FAAL-SAFE (harde regel 2): het review-commando draaide, maar er is
+        # gar niets — geen verse review-JSON, geen verse review-comment, geen
+        # stale comment, geen "Failed to review PR"-comment. Een gezonde run
+        # levert altijd iets op (review, no-op-review of een failure-comment);
+        # dit pad betekent dat pr-agent crashte VÓÓR het posten. Eerder
+        # (journal 2026-11-02/03) exittte dit stil met 0: groene run zónder
+        # review bij een parse-faal op een éérste review. Nu rood.
+        # (De --no-body-modus, niet gebruikt door de workflow, houdt hier het
+        # oude gedrag: daar is de afwezigheid van een body by design.)
+        if not args.no_body:
+            print(
+                "GEEN review-signaal uit deze run: geen review-JSON, geen "
+                "review-comment, geen failure-comment — pr-agent droeg het "
+                "commando uit maar postte niets (crash vóór publish?). "
+                "Rode workflow (harde regel 2), geen stille degradatie.",
+                file=sys.stderr,
+            )
+            return 3
+        print("(geen review geplaatst: --no-body en geen review-JSON)")
         return 0
 
     # 2. Inline comments uit de JSON (key-issues, evt. met suggested_fix-fences
