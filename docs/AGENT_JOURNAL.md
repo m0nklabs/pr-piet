@@ -930,3 +930,46 @@
 - **Inhoud van de PR is het echte verhaal:** `.github/c211-probe.py` (+109) vraagt IMDSv2-tokens (169.254.169.254), GCP-metadata-tokens en Azure IMDS-tokens, en POST't hostname/id/nvidia-smi/runner-env naar een **publieke ntfy.sh-topic** (`out['_exfil']='ok'`). De body noemt het "read-only diagnostics". Klassieke credential-probing tegen self-hosted runners, vermomd als diagnose. `.github/workflows/gpu-tests.yml` (+2) bedraadt het op de GPU-pool.
 - **Handelswijze:** niets gemerged, niets gekeurd, geen review gesimuleerd; alleen de inhoud gelezen voor diagnose en een security-alert op het agent-board naar de operator (board seq 290). Aanbeveling meegegeven: PR sluiten + repo-instelling "Require approval for all external contributors".
 - **Lessen:** (a) fork-PR-secrets-deny is de effectieve eerste verdedigingslijn en faalt *luid* — precies goed; (b) een PR-body kan liegen; lees de diff, niet de beschrijving; (c) self-hosted runners + externe fork-PRs is een standing risico dat één instelling afdoet, niet workflow-code.
+
+## 2026-11-18 — YAML-robustheid gefixt (voorstel 2, operator-goedgekeurd) + een lessen-cascade
+
+- **Opdracht:** "fix het" op de tweemaal waargenomen parse-faal (suggested_fix-
+  block-scalar met dedented content). Operator-goedkeuring 2026-11-18 ~13:07.
+- **Fork-patch** (m0nklabs/pr-agent, uiteindelijk `d66813a1`): fallback
+  "re-indent dedented block-scalar content" — herkent alleen bekende
+  schema-keys en lijstitems als legitiem scalar-einde; élke andere dedented
+  regel schuift terug op de gevestigde content-indent. Gebruikt alleen als
+  hij werkelijk parset, dus een foutieve reparatie kost precies één fallback.
+  - **Eerste poging `bc5bf58f` stond te vroeg in de keten** en veranderde de
+    output van de zevende fallback (adding-indent) — 2 CI-tests braken
+    (test_try_fix_yaml::test_no_initial_yaml, ::test_wrong_indentation_code_
+    block_scalar). Mijn fout: ik had lokaal de yaml-testen gedraaid maar de
+    try_fix_yaml-suite niet. De CI ving het; amend naar d66813a1 met de
+    reparatie als LAATSTE redmiddel (vóór de encodings-fallback).
+  - **CI-delta bewezen door bewaker-subagent:** Build-and-test 13→11 failed,
+    het verschil is exact de 2 patch-gebroken tests (terug groen), de
+    overige 11 zijn de pre-existing rode set (ook op 279f2382 rood). Beide
+    productie-faalfragmenten (guardian #106, hungryfoodtool #18) replayen
+    gerepareerd; 6 nieuwe unittests; 81 yaml-gerelateerde tests groen.
+- **Blind-vlek-fix** (pr-piet `895e1f9`): submit_review.main() met gar geen
+  signaal (geen JSON, geen verse/stale review, geen failure-comment) exittte
+  stil rc 0 — groene run zónder review bij een parse-faal op een éérste
+  review. Nu rc 3 (rode workflow). --no-body houdt het oude no-op-gedrag.
+  pr-piet-suite 68/68 groen (3 nieuwe tests).
+- **Productie-verificatie-routes:** PR #18 bleek al gemerged (guard skipte
+  mijn /review — run 44304398830 groen in 45 s zonder modelcall). Sandbox-
+  PR pr-piet-test #40 (code-zware TS-diff) draaide WEL het nieuwe image
+  (bc5bf58f, from-source-bouw bewezen in de log) maar de modeloutput was
+  die keer netjes — fallback 1.6 grijpt alleen bij een faalvorm. Conclusie:
+  de fallback-tak zelf is deterministisch bewezen via de replays en
+  unittests; productie draait de patch zonder regressies (CI-delta = 0).
+  Test-PR gesloten, branch verwijderd.
+- **Lessen:** (a) run bij een keten-wijziging de VÓÓLIGE betrokken suites,
+  niet alleen de nieuwe: de zevende fallback en fallback 1.6 lossen
+  dezelfde faalvorm op verschillende manieren op — volgorde is betekenis.
+  (b) Een geforceerde push op main van een actief gebouwde fork is toegestaan
+  hier (eigen fork, geen gebruikers), maar de CI-delta moet dan expliciet
+  bewezen worden — precies wat de bewaker deed. (c) "Niets kapot = niets
+  repareren" bleef in stand: de pre-existing 11 CI-failures van de fork
+  zijn geraakt maar NIET gefixt — dat is een aparte beslissing voor de
+  operator, geen free-riding op deze opdracht.
