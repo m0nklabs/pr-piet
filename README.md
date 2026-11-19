@@ -3,7 +3,8 @@
 Automatische PR-review voor m0nklabs-repos: [The-PR-Agent/pr-agent](https://github.com/The-PR-Agent/pr-agent)
 met **tree-sitter + Aider-stijl repo-context** (callers/callees, PageRank),
 gerund op de org **self-hosted runners** en via de **guardian-llmprovider-gateway**.
-Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
+The configured default uses the **Copilot bridge**; model overrides follow the
+[actor-specific policy](AGENTS.md#harde-regels-nooit-overtreden). No fallback: errors fail the workflow.
 
 ```
 ┌─ doel-repo ───────────────────────────────────────────────────────────┐
@@ -31,9 +32,14 @@ Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
 
 ## Gebruik in een doel-repo
 
-1. Zet het org-secret `GUARDIAN_API_KEY` in de doel-repo
-   (Settings → Secrets and variables → Actions). De key is de `pr-piet`-key
-   van de gateway.
+1. Configure the existing PR-Piet review-only gateway key as the target's
+   `GUARDIAN_API_KEY` Actions secret (Settings → Secrets and variables → Actions).
+   For a **private repository on GitHub Free**, use **New repository secret**:
+   [organization-level secrets are unavailable on that plan](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets#creating-secrets-for-an-organization),
+   even with `visibility: all`. Organization-secret delivery is valid only when
+   the plan and repository access policy allow it; do not assume organization
+   membership alone grants access. This is the `pr-piet` review key, **not a
+   Semgrep credential**. Never put its value in tracked files, docs or logs.
 2. Kopieer [examples/caller-pr-piet.yml](examples/caller-pr-piet.yml) naar
    `.github/workflows/pr-piet.yml` in de doel-repo.
 3. Klaar. De workflow reageert op:

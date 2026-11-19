@@ -52,9 +52,14 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
      `temperature=1` voor die route en `0.2` elders.
 2. **GEEN fallback_models.** Een model- of gateway-fout moet een rode
    workflow zijn, geen stille degradatie. `fallback_models = []` blijft leeg.
-3. **Geen secrets in deze repo.** De gateway-key (`GUARDIAN_API_KEY`) is een
-   org-secret en staat alleen in GitHub Secrets / lokale env — nooit in
-   config, workflows of README. De `.env`-bestanden zijn gitignored.
+3. **No secret values in this repository.** `GUARDIAN_API_KEY` is the existing
+   PR-Piet review-only gateway key, not a Semgrep credential. Store its value
+   only in GitHub Actions Secrets / local env, never in tracked files;
+   `.env` files remain gitignored. Private targets on GitHub Free require a
+   **repository-level** secret: organization secrets are unavailable even with
+   `visibility: all`. Use an organization secret only when the plan and its
+   access policy permit it. Follow the [target-repository setup](README.md#gebruik-in-een-doel-repo)
+   and [GitHub's plan restriction](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets#creating-secrets-for-an-organization).
 4. **De map-job heeft géén secrets.** Job `map` draait de tree-sitter mapper
    op PR-code (untrusted) met alleen `contents: read`. Secrets zitten alleen
    in `review_tier1`/`review_tier2`. Nooit secrets naar de map-job brengen.
@@ -68,13 +73,14 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    `file://`-constructies — die bestaan niet in pr-agent.
 7. **Deze repo moet publiek blijven** — anders werken cross-repo `uses:`
    vanuit andere m0nklabs-repos niet.
-8. **NOOIT auto-merge of auto-approve.** Altijd human merge. PR-Agent kan via
-   zijn interne `auto_approve()` (event=`APPROVE`) en `commitable_code_suggestions`
-   een PR laten approven/mergen; dat moet altijd UIT blijven. Houd
-   `.pr_agent.toml` vrij van `enable_auto_approve`/`auto_approve` en
-   `commitable_code_suggestions = false`. De workflow mag nooit een review met
-   event `APPROVE` posten en nooit een merge-API-aanroep doen. Merge gebeurt
-   uitsluitend handmatig (human) op GitHub.
+8. **The reviewer workflow never approves or merges pull requests.** Keep
+   PR-Agent's `auto_approve()` / `enable_auto_approve` disabled and
+   `commitable_code_suggestions = false`; the workflow must never submit
+   `APPROVE` or call the merge API. This runtime restriction does not override
+   user-global agent merge policy: an authorized development agent may merge
+   one PR deliberately after completed current-head review, handled findings,
+   the operator's waiting window and fresh activity/base/check verification.
+   Human-gated areas retain their explicit approval requirements.
 9. **PR-Piet draagt geen productcode bij aan doel-repos** (gecorrigeerd
    2026-11-07; de oude tekst verbood élke commit in doel-repos en sprak
    daarmee de eigen Phase-3-status tegen, waarin de caller in 49/49 repo's is
@@ -308,14 +314,21 @@ pr-agent-comment op terug.
   (zijn `tier1_clean`-output ontbreekt dan). Dit dekt het race-venster
   "PR gesloten tussen trigger en run-start" — bv. PR #2 (gemerged 22:44,
   run gestart 22:53) dat anders onnodig 23+ min modeltijd verbruikte.
-- **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
-  Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
-  (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).
-- **De draaiende gateway-service leest config uit `/home/flip/llama_cpp_guardian`**
-  (systemd `llama-guardian.service`), NIET uit
-  `/home/flip/guardian-llmprovider-gateway`. Keys-file wordt per request
-  herlezen; nieuwe keys werken zonder restart. Bij twijfel: beide paden
-  sync houden.
+- **Gateway authentication uses Bearer**, not `X-Guardian-Org`:
+  `Authorization: Bearer <key>`. Credential values stay out of docs and logs.
+- **Resolve the credential source with the gateway owner before any key work.**
+  Confirm the service's effective `GUARDIAN_LLMPROVIDER_GATEWAY_ROOT` / environment;
+  [public path resolution](https://github.com/m0nklabs/guardian-llmprovider-gateway/blob/main/app/paths.py)
+  derives `CONFIG_DIR` from that root (the checkout root by default).
+  `guardian_apikeys_file()` selects the first existing file under `CONFIG_DIR`:
+  `guardian.keys.yaml`, `guardian_apikeys.yaml`, then `api_keys.json`.
+  The [public auth loader](https://github.com/m0nklabs/guardian-llmprovider-gateway/blob/main/app/proxy/auth.py#L581-L605)
+  reads a token-to-record mapping; the existing review credential's record has
+  `name: pr-piet`. Selection/provisioning stays with the authorized gateway owner.
+  Inspect public source, **do not import or invoke the auth loader** to locate
+  credentials: it can change permissions, migrate data and register secrets.
+  Never create a legacy directory or dual-sync key stores. Resolving a file path
+  alone does not verify the full live service configuration or key acceptance.
 - **Runners:** org-pool `m0nklabs-runner-1..4`, labels `self-hosted`,
   `Linux`, `X64`, `gpu`. PR-Piet gebruikt géén GPU. GPU-jobs nooit zonder
   `bin/gpu-run.sh` (serieel-lock) — maar PR-Piet doet geen GPU-werk.
@@ -417,9 +430,10 @@ oude gedrag; de global identity van de host is `PR-Piet <pr-piet@m0nklabs.dev>`.
 - Workflow-wijzigingen: testen op een test-PR in een doel-repo voordat je
   `@main` laat verwijzen naar nieuwe logica (of gebruik een `@ref`-pinning
   in de caller).
-- Nieuwe gateway-key: `scripts/generate_key.py` in de gateway-repo, en de
-  entry óók in `/home/flip/llama_cpp_guardian/config/guardian.keys.yaml`
-  (draaiende service) zetten.
+- Gateway-key provisioning: the authorized gateway owner follows the
+  credential-source resolution rule and public gateway source linked above.
+  Reuse the existing review-only credential for installation; do not generate
+  or duplicate keys as a documentation/setup shortcut.
 
 ## Status
 
