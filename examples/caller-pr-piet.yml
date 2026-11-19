@@ -3,7 +3,10 @@
 # .github/workflows/pr-piet.yml in ELK doel-repo dat PR-Piet wil gebruiken).
 # ----------------------------------------------------------------------------
 # Vereisten:
-#   - Org-secret GUARDIAN_API_KEY (de pr-piet gateway key) in de doel-repo.
+#   - GUARDIAN_API_KEY: existing PR-Piet review-only key, not a Semgrep credential.
+#     Private targets on GitHub Free need a repository secret; an organization
+#     secret works only with an eligible plan and repository access policy.
+#     See README.md, "Gebruik in een doel-repo"; never commit secret values.
 #   - Self-hosted runners [self-hosted, Linux] van de org-pool.
 #   - Voor fork-PRs: vervang `pull_request` door `pull_request_target`
 #     (zie README.md, sectie "Fork-PRs en secrets").

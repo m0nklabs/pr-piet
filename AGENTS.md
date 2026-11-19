@@ -52,9 +52,14 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
      `temperature=1` voor die route en `0.2` elders.
 2. **GEEN fallback_models.** Een model- of gateway-fout moet een rode
    workflow zijn, geen stille degradatie. `fallback_models = []` blijft leeg.
-3. **Geen secrets in deze repo.** De gateway-key (`GUARDIAN_API_KEY`) is een
-   org-secret en staat alleen in GitHub Secrets / lokale env — nooit in
-   config, workflows of README. De `.env`-bestanden zijn gitignored.
+3. **No secret values in this repository.** `GUARDIAN_API_KEY` is the existing
+   PR-Piet review-only gateway key, not a Semgrep credential. Store its value
+   only in GitHub Actions Secrets / local env, never in tracked files;
+   `.env` files remain gitignored. Private targets on GitHub Free require a
+   **repository-level** secret: organization secrets are unavailable even with
+   `visibility: all`. Use an organization secret only when the plan and its
+   access policy permit it. Follow the [target-repository setup](README.md#gebruik-in-een-doel-repo)
+   and [GitHub's plan restriction](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets#creating-secrets-for-an-organization).
 4. **De map-job heeft géén secrets.** Job `map` draait de tree-sitter mapper
    op PR-code (untrusted) met alleen `contents: read`. Secrets zitten alleen
    in `review_tier1`/`review_tier2`. Nooit secrets naar de map-job brengen.
