@@ -313,14 +313,21 @@ pr-agent-comment op terug.
   (zijn `tier1_clean`-output ontbreekt dan). Dit dekt het race-venster
   "PR gesloten tussen trigger en run-start" — bv. PR #2 (gemerged 22:44,
   run gestart 22:53) dat anders onnodig 23+ min modeltijd verbruikte.
-- **Gateway-auth is Bearer**, geen `X-Guardian-Org`-header: `Authorization:
-  Bearer <key>`; keys staan per-client in `config/guardian.keys.yaml`
-  (oude pad van de draaiende service: `/home/flip/llama_cpp_guardian/config/`).
-- **De draaiende gateway-service leest config uit `/home/flip/llama_cpp_guardian`**
-  (systemd `llama-guardian.service`), NIET uit
-  `/home/flip/guardian-llmprovider-gateway`. Keys-file wordt per request
-  herlezen; nieuwe keys werken zonder restart. Bij twijfel: beide paden
-  sync houden.
+- **Gateway authentication uses Bearer**, not `X-Guardian-Org`:
+  `Authorization: Bearer <key>`. Credential values stay out of docs and logs.
+- **Resolve the credential source with the gateway owner before any key work.**
+  Confirm the service's effective `GUARDIAN_LLMPROVIDER_GATEWAY_ROOT` / environment;
+  [public path resolution](https://github.com/m0nklabs/guardian-llmprovider-gateway/blob/main/app/paths.py)
+  derives `CONFIG_DIR` from that root (the checkout root by default).
+  `guardian_apikeys_file()` selects the first existing file under `CONFIG_DIR`:
+  `guardian.keys.yaml`, `guardian_apikeys.yaml`, then `api_keys.json`.
+  The [public auth loader](https://github.com/m0nklabs/guardian-llmprovider-gateway/blob/main/app/proxy/auth.py#L581-L605)
+  reads a token-to-record mapping; the existing review credential's record has
+  `name: pr-piet`. Selection/provisioning stays with the authorized gateway owner.
+  Inspect public source, **do not import or invoke the auth loader** to locate
+  credentials: it can change permissions, migrate data and register secrets.
+  Never create a legacy directory or dual-sync key stores. Resolving a file path
+  alone does not verify the full live service configuration or key acceptance.
 - **Runners:** org-pool `m0nklabs-runner-1..4`, labels `self-hosted`,
   `Linux`, `X64`, `gpu`. PR-Piet gebruikt géén GPU. GPU-jobs nooit zonder
   `bin/gpu-run.sh` (serieel-lock) — maar PR-Piet doet geen GPU-werk.
@@ -422,9 +429,10 @@ oude gedrag; de global identity van de host is `PR-Piet <pr-piet@m0nklabs.dev>`.
 - Workflow-wijzigingen: testen op een test-PR in een doel-repo voordat je
   `@main` laat verwijzen naar nieuwe logica (of gebruik een `@ref`-pinning
   in de caller).
-- Nieuwe gateway-key: `scripts/generate_key.py` in de gateway-repo, en de
-  entry óók in `/home/flip/llama_cpp_guardian/config/guardian.keys.yaml`
-  (draaiende service) zetten.
+- Gateway-key provisioning: the authorized gateway owner follows the
+  credential-source resolution rule and public gateway source linked above.
+  Reuse the existing review-only credential for installation; do not generate
+  or duplicate keys as a documentation/setup shortcut.
 
 ## Status
 
