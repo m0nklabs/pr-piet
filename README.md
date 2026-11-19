@@ -3,7 +3,8 @@
 Automatische PR-review voor m0nklabs-repos: [The-PR-Agent/pr-agent](https://github.com/The-PR-Agent/pr-agent)
 met **tree-sitter + Aider-stijl repo-context** (callers/callees, PageRank),
 gerund op de org **self-hosted runners** en via de **guardian-llmprovider-gateway**.
-Alleen **open-weights modellen**, geen fallback (fout = rode workflow).
+The configured default uses the **Copilot bridge**; model overrides follow the
+[actor-specific policy](AGENTS.md#harde-regels-nooit-overtreden). No fallback: errors fail the workflow.
 
 ```
 ┌─ doel-repo ───────────────────────────────────────────────────────────┐
