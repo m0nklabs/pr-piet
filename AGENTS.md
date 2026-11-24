@@ -119,11 +119,12 @@ doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
        │                    The-PR-Agent/pr-agent; patch: conditional
        │                    suggested_fix veld, zie PR-PIET-PATCH.md daar)
        │                    met artifact_path=.pr_piet/context.md,
-       │                    model=openai/github-copilot/openai/gpt-6.1-sol,
+       │                    model=openai/z-ai/glm-5.3-flash (tijdelijk,
+       │                    zie harde regel 1),
        │                    fallback_models=[], OPENAI.API_BASE=gateway
        │                    → detect_review_clean.py (tier1_clean output)
        └─ job review_tier2 : alleen als enable_tier2 && tier1_clean
-                             model=openai/z-ai/glm-5.2, zelfde artifact
+                             model=openai/z-ai/glm-5.3, zelfde artifact
 ```
 
 Config-hiërarchie voor pr-agent (laag → hoog):
