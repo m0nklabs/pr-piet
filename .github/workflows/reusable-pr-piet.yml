@@ -544,8 +544,14 @@ jobs:
           PR_PIET_SINGLE_CALL: ${{ inputs.single_call_review }}
         run: |
           if [ -n "${REVIEW_JSON}" ]; then
-            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review.json
-            json_arg="--review-json /tmp/pr-agent-review.json"
+            # Uniek pad per job: de org-runners draaien alle vier op dezelfde
+            # host (ai-kvm2) en delen dus /tmp. Een vast pad laat parallelle
+            # runs elkaars review-JSON overschrijven — bewezen 2026-11-24:
+            # pr-piet#7 postte de bevinding van hungryfoodtool#49 (identieke
+            # body, zelfde seconde, verschillende runners op dezelfde host).
+            json_path="$(mktemp -t pr-agent-review.XXXXXXXX.json)"
+            printf '%s' "${REVIEW_JSON}" > "$json_path"
+            json_arg="--review-json $json_path"
           else
             echo "Geen review-JSON in step-output; fallback: body uit issue-comment"
             json_arg=""
@@ -584,8 +590,11 @@ jobs:
         run: |
           clean="false"
           if [ -n "${REVIEW_JSON}" ]; then
-            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review-detect.json
-            clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json /tmp/pr-agent-review-detect.json)
+            # Zelfde reden als bij submit: nooit een vast host-pad gebruiken.
+            detect_path="$(mktemp -t pr-agent-review-detect.XXXXXXXX.json)"
+            printf '%s' "${REVIEW_JSON}" > "$detect_path"
+            clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json "$detect_path")
+            rm -f "$detect_path"
           fi
           # Een lege diff (alle bestanden weggefilterd) is geen model- of
           # reviewfout: de fork meldt dat expliciet met no_reviewable_files,
@@ -831,8 +840,14 @@ jobs:
           PR_PIET_SINGLE_CALL: "true"
         run: |
           if [ -n "${REVIEW_JSON}" ]; then
-            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review.json
-            json_arg="--review-json /tmp/pr-agent-review.json"
+            # Uniek pad per job: de org-runners draaien alle vier op dezelfde
+            # host (ai-kvm2) en delen dus /tmp. Een vast pad laat parallelle
+            # runs elkaars review-JSON overschrijven — bewezen 2026-11-24:
+            # pr-piet#7 postte de bevinding van hungryfoodtool#49 (identieke
+            # body, zelfde seconde, verschillende runners op dezelfde host).
+            json_path="$(mktemp -t pr-agent-review.XXXXXXXX.json)"
+            printf '%s' "${REVIEW_JSON}" > "$json_path"
+            json_arg="--review-json $json_path"
           else
             echo "Geen review-JSON in step-output; fallback: body uit issue-comment"
             json_arg=""
@@ -864,8 +879,11 @@ jobs:
         run: |
           clean="false"
           if [ -n "${REVIEW_JSON}" ]; then
-            printf '%s' "${REVIEW_JSON}" > /tmp/pr-agent-review-detect.json
-            clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json /tmp/pr-agent-review-detect.json)
+            # Zelfde reden als bij submit: nooit een vast host-pad gebruiken.
+            detect_path="$(mktemp -t pr-agent-review-detect.XXXXXXXX.json)"
+            printf '%s' "${REVIEW_JSON}" > "$detect_path"
+            clean=$(python3 pr-piet/scripts/detect_review_clean.py --review-json "$detect_path")
+            rm -f "$detect_path"
           fi
           no_reviewable="false"
           if [ -n "${REVIEW_JSON}" ] && printf '%s' "${REVIEW_JSON}" \
