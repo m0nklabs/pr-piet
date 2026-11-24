@@ -46,10 +46,10 @@ on:
         type: string
         default: "http://172.17.0.1:11434/v1"
       model_tier1:
-        description: "Tier-1 model (via gateway). Operator-besluit 2026-10-27: github-copilot/openai/gpt-6.1-sol via de Copilot-bridge — bewezen op de reuzen-PR waar deepseek-v4.1 25+ min vastliep (2 min 17 s, volwaardige review). Let op: dit is CLOSED-WEIGHTS en factureert op de Copilot-abonnement-quota. Een faal wordt rode run (harde regel 2)."
+        description: "Tier-1 model (via gateway). TIJDELIJK glm-5.3-flash (operator-besluit 2026-11-24): de Copilot-abonnement-quota is uitgeput (HTTP 402 quota_exceeded op github-copilot/openai/gpt-6.1-sol), waardoor elke review faalde. Open-weights, factureert niet op de Copilot-quota. Terugdraaien = deze default weer op openai/github-copilot/openai/gpt-6.1-sol zetten. Een faal wordt rode run (harde regel 2)."
         required: false
         type: string
-        default: "openai/github-copilot/openai/gpt-6.1-sol"
+        default: "openai/z-ai/glm-5.3-flash"
       model_tier2:
         description: "Tier-2 second-opinion model — draait NIET automatisch (enable_tier2 default false); handmatig via een /review2-comment."
         required: false
@@ -59,7 +59,7 @@ on:
         description: "Alleen voor de weergave in de check-naam, zonder de openai/-routingprefix (bv. gpt-6.1-sol). Puur cosmetisch: het echte model komt uit model_tier1."
         required: false
         type: string
-        default: "gpt-6.1-sol"
+        default: "glm-5.3-flash"
       enable_tier2:
         description: "Tier 2 (second opinion) AUTOMATISCH aan/uit — default false; /review2 werkt altijd, ongeacht deze vlag."
         required: false
