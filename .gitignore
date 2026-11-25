@@ -13,6 +13,10 @@ venv/
 .pr_piet/context.md
 .pr_piet/*.json
 
+# Coverage artifacts (pytest-cov, uploaded in CI — never committed)
+.coverage
+coverage.xml
+
 # OS / editor
 .DS_Store
 *.swp
