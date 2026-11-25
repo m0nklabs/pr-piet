@@ -557,18 +557,25 @@ jobs:
             json_arg=""
           fi
           rc=0
+          # Ook de stderr/stdout-buffers horen per job uniek te zijn: op een
+          # gedeeld /tmp overschrijft een parallelle run ze, waardoor een rode
+          # run de foutoutput van een andere PR print.
+          out_path="$(mktemp -t pr-agent-submit.XXXXXXXX.out)"
+          err_path="$(mktemp -t pr-agent-submit.XXXXXXXX.err)"
           python3 pr-piet/scripts/submit_review.py \
             --pr-number "${{ inputs.pr_number }}" \
             --heading "PR-Piet Review (tier 1)" \
             --since "${{ steps.ts.outputs.since }}" \
             --model "${{ steps.model.outputs.model_label }}" \
             ${json_arg} \
-            > /tmp/submit_review.out 2> /tmp/submit_review.err || rc=$?
-          cat /tmp/submit_review.out
-          if [ -s /tmp/submit_review.err ]; then
+            > "$out_path" 2> "$err_path" || rc=$?
+          cat "$out_path"
+          if [ -s "$err_path" ]; then
             echo "--- stderr ---"
-            cat /tmp/submit_review.err
+            cat "$err_path"
           fi
+          rm -f "$out_path" "$err_path"
+          if [ -n "${json_path:-}" ]; then rm -f "$json_path"; fi
           # Harde regel 2: een model-/gateway-fout (geen verse review-JSON en
           # geen verse review-comment => lege/afgekapte model-output) moet een
           # RODE workflow zijn, géén stille fallback van een verouderde review
@@ -853,18 +860,25 @@ jobs:
             json_arg=""
           fi
           rc=0
+          # Ook de stderr/stdout-buffers horen per job uniek te zijn: op een
+          # gedeeld /tmp overschrijft een parallelle run ze, waardoor een rode
+          # run de foutoutput van een andere PR print.
+          out_path="$(mktemp -t pr-agent-submit.XXXXXXXX.out)"
+          err_path="$(mktemp -t pr-agent-submit.XXXXXXXX.err)"
           python3 pr-piet/scripts/submit_review.py \
             --pr-number "${{ inputs.pr_number }}" \
             --heading "PR-Piet Review (tier 2)" \
             --since "${{ steps.ts.outputs.since }}" \
             --model "${{ steps.model.outputs.model_label }}" \
             ${json_arg} \
-            > /tmp/submit_review.out 2> /tmp/submit_review.err || rc=$?
-          cat /tmp/submit_review.out
-          if [ -s /tmp/submit_review.err ]; then
+            > "$out_path" 2> "$err_path" || rc=$?
+          cat "$out_path"
+          if [ -s "$err_path" ]; then
             echo "--- stderr ---"
-            cat /tmp/submit_review.err
+            cat "$err_path"
           fi
+          rm -f "$out_path" "$err_path"
+          if [ -n "${json_path:-}" ]; then rm -f "$json_path"; fi
           # Harde regel 2: lege/afgekapte model-output = rode run (exit 3).
           if [ "$rc" -eq 3 ]; then
             echo "::error::PR-Piet tier 2: geen verse review (lege model-output); zie stderr"
