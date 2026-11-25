@@ -25,13 +25,19 @@ Andere m0nklabs-repos gebruiken PR-Piet via:
    dsh-richtlijn over achtergrond-jobs: nooit busy-pollen in de hoofdlus.)
 1. **Modelbeleid — de poort hangt af van WIE het vraagt** (operator-besluit
    2026-10-26: "alles wat guardian serveert is allowed voor @m0nk111").
-   - **Tier-1 default = `github-copilot/openai/gpt-6.1-sol`** (operator-besluit
-     2026-10-27). Dat is **closed-weights** en factureert op de
-     Copilot-abonnement-quota — bewust gekozen: deepseek-v4.1-flash-1017 liep
-     op reuzen-PR's 25+ min vast op `finish_reason: length` met lege content
-     (budget, geen budget, 131k-backstop, effort=medium en streaming allemaal
-     gemeten en uitgeput), terwijl sol dezelfde PR in 2 min 17 s volledig
-     reviewde. Tier-2 blijft `z-ai/glm-5.3` (open-weights). De default staat in
+   - **Tier-1 default = `openai/z-ai/glm-5.3-flash`** — TIJDELIJK sinds
+     2026-11-24 (operator-besluit), omdat de Copilot-abonnement-quota uitgeput
+     raakte: elke tier-1 review faalde met `HTTP 402 quota_exceeded` op
+     `github-copilot/openai/gpt-6.1-sol` (13 runs, 4 PR's zonder review).
+     End-to-end bewezen vóór de omschakeling (pr-piet-test run 45507685247,
+     `override=false`, streaming, echte review) en daarna in productie op
+     oelala PR #271 ('model-id bewezen via caller-input') en factorio-ai-companion PR #15.
+     **Terugdraaien** = `model_tier1` + `model_tier1_label` terugzetten op
+     `openai/github-copilot/openai/gpt-6.1-sol` / `gpt-6.1-sol`, zodra de
+     maandquota reset. De oude keuze (2026-10-27) was closed-weights om
+     `finish_reason: length` bij deepseek-flash te ontlopen; let dus op
+     dezelfde faalmodus bij grote PR's op flash. Tier-2 blijft
+     `openai/z-ai/glm-5.3` (open-weights). De default staat in
      de reusable workflow (`model_tier1` + cosmetische `model_tier1_label`);
      geen enkele caller overschrijft hem, dus één wijziging werkt org-breed —
      inclusief de automatische reviews in alle 49 repos.
@@ -113,11 +119,12 @@ doel-repo/.github/workflows/pr-piet.yml (caller: triggers + secrets)
        │                    The-PR-Agent/pr-agent; patch: conditional
        │                    suggested_fix veld, zie PR-PIET-PATCH.md daar)
        │                    met artifact_path=.pr_piet/context.md,
-       │                    model=openai/github-copilot/openai/gpt-6.1-sol,
+       │                    model=openai/z-ai/glm-5.3-flash (tijdelijk,
+       │                    zie harde regel 1),
        │                    fallback_models=[], OPENAI.API_BASE=gateway
        │                    → detect_review_clean.py (tier1_clean output)
        └─ job review_tier2 : alleen als enable_tier2 && tier1_clean
-                             model=openai/z-ai/glm-5.2, zelfde artifact
+                             model=openai/z-ai/glm-5.3, zelfde artifact
 ```
 
 Config-hiërarchie voor pr-agent (laag → hoog):
